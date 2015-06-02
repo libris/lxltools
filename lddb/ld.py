@@ -9,25 +9,25 @@ def flatten(data, objects=None):
     if isinstance(data, dict):
         data = [data]
     for part in data:
-        store_flattened(part, result)
+        _store_flattened(part, result)
     result.reverse()
     return {GRAPH: result}
 
-def store_flattened(current, result):
+def _store_flattened(current, result):
     if not isinstance(current, dict):
         return current
-    flattened = make_flat(current, result)
+    flattened = _make_flat(current, result)
     result.append(flattened)
     itemid = current.get(ID)
     return {ID: itemid} if itemid else current
 
-def make_flat(obj, result):
+def _make_flat(obj, result):
     updated = {}
     for key, value in obj.items():
         if isinstance(value, list):
-            value = [store_flattened(o, result) for o in value]
+            value = [_store_flattened(o, result) for o in value]
         else:
-            value = store_flattened(value, result)
+            value = _store_flattened(value, result)
         updated[key] = value
     return updated
 
