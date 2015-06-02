@@ -4,8 +4,8 @@ from __future__ import unicode_literals
 GRAPH, ID, TYPE, REV = '@graph', '@id', '@type', '@reverse'
 
 
-def flatten(data, objects=None):
-    result = [] if objects is None else objects
+def flatten(data):
+    result = []
     if isinstance(data, dict):
         data = [data]
     for part in data:
