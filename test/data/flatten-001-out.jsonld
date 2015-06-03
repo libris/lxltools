@@ -11,7 +11,8 @@
       "@id": "/thing/something",
       "sameAs": ["/resouce/auth/1", "http://dbpedia.org/resource/Thing"],
       "name": "Something",
-      "creator": {"@id": "/agent/somebody"}
+      "creator": {"@id": "/agent/somebody"},
+      "publisher": {"@id": "/agent/everybody"}
     },
     {
       "@id": "/agent/somebody",

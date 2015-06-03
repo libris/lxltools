@@ -17,7 +17,8 @@ def _store_flattened(current, result):
     if not isinstance(current, dict):
         return current
     flattened = _make_flat(current, result)
-    result.append(flattened)
+    if any(key for key in flattened if key != ID):
+        result.append(flattened)
     itemid = current.get(ID)
     return {ID: itemid} if itemid else current
 
