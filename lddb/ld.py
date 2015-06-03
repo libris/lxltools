@@ -4,8 +4,8 @@ from __future__ import unicode_literals
 GRAPH, ID, TYPE, REV = '@graph', '@id', '@type', '@reverse'
 
 
-def flatten(data, objects=None):
-    result = [] if objects is None else objects
+def flatten(data):
+    result = []
     if isinstance(data, dict):
         data = [data]
     for part in data:
@@ -17,7 +17,8 @@ def _store_flattened(current, result):
     if not isinstance(current, dict):
         return current
     flattened = _make_flat(current, result)
-    result.append(flattened)
+    if any(key for key in flattened if key != ID):
+        result.append(flattened)
     itemid = current.get(ID)
     return {ID: itemid} if itemid else current
 
