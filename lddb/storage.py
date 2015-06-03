@@ -32,15 +32,25 @@ class Storage:
     def load_thing(self, identifier):
         """Finds record(s) decribing a thing. Returns a list of tuples containing identifier, data and entry."""
         cursor = self.connection.cursor()
-        query_dict = {
-            "@graph": [
-                { "@id": identifier }
-            ]
-        }
+        json_query = [{ "@id": identifier }]
 
-        print("json", json.dumps(query_dict))
-        sql = "SELECT id,data,entry FROM "+self.tname+" WHERE data @> %(json)s"
-        cursor.execute(sql, {'json': json.dumps(query_dict)})
+        sql = "SELECT id,data,entry FROM "+self.tname+" WHERE data->'@graph' @> %(json)s"
+        cursor.execute(sql, {'json': json.dumps(json_query)})
+        result = list(self._assemble_result_list(cursor))
+        self.connection.commit()
+        return result
+
+    def load_by_relation(self, relation, identifier):
+        cursor = self.connection.cursor()
+        json_query = [{relation:{ "@id": identifier }}]
+        listed_json_query = [{relation:[{ "@id": identifier }]}]
+        print("json_query", json.dumps(json_query))
+        sql = "SELECT id,data,entry FROM "+self.tname+" WHERE data->'@graph' @> %(json)s OR data->'@graph' @> %(listed_json)s"
+        cursor.execute(sql, {
+                'json': json.dumps(json_query),
+                'listed_json': json.dumps(listed_json_query)
+            }
+        )
         result = list(self._assemble_result_list(cursor))
         self.connection.commit()
         return result
@@ -58,16 +68,9 @@ class Storage:
 
 
     # Store methods
-    def _calc_checksum(self, data):
-        md5 = hashlib.md5()
-        ordered_data = collections.OrderedDict(sorted(data.items()))
-        md5.update(json.dumps(ordered_data).encode('utf-8'))
-        return md5.hexdigest()
-
     def store(self, identifier, data, entry):
         try:
             cursor = self.connection.cursor()
-            entry['checksum'] = self._calc_checksum(data)
             if self.versioning:
                 insert_version_sql = "INSERT INTO {version_table_name} (id,checksum,data,entry,ts) SELECT %(identifier)s,%(checksum)s,%(data)s,%(entry)s,%(ts)s WHERE NOT EXISTS (SELECT 1 FROM {version_table_name} WHERE id = %(identifier)s AND checksum = %(checksum)s)".format(version_table_name = self.vtname)
                 cursor.execute(insert_version_sql, {
