@@ -37,17 +37,18 @@ def transfer(**args):
                 entry = row[2]
                 entry['extraData'] = row[3]
                 deleted = entry.get('deleted', False)
+                created = datetime.fromtimestamp(int(round(entry.get('created')/1000)))
                 ts = datetime.fromtimestamp(int(round(entry.get('modified')/1000)))
                 entry.pop('timestamp')
 
-                values.append((identifier, json.dumps(data), json.dumps(entry), ts, deleted))
+                values.append((identifier, json.dumps(data), json.dumps(entry), created, ts, deleted))
 
             except Exception as e:
                 print("Failed to convert row {0} to json".format(row[0]), e)
                 raise
 
-        arg_str = ",".join(bytes(writecur.mogrify("(%s,%s,%s,%s,%s)", x)).decode("utf-8") for x in values)
-        writecur.execute("INSERT INTO "+args['totable']+" (id,data,entry,ts,deleted) VALUES " + arg_str)
+        arg_str = ",".join(bytes(writecur.mogrify("(%s,%s,%s,%s,%s,%s)", x)).decode("utf-8") for x in values)
+        writecur.execute("INSERT INTO "+args['totable']+" (id,data,entry,created,modified,deleted) VALUES " + arg_str)
         con.commit()
 
 

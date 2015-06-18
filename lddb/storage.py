@@ -58,7 +58,7 @@ class Storage:
     def load_all_versions(self, identifier):
         cursor = self.connection.cursor()
         if self.versioning:
-            sql = "SELECT id,data,entry FROM "+self.vtname+" WHERE id = %{identifier}s ORDER BY ts ASC"
+            sql = "SELECT id,data,entry FROM "+self.vtname+" WHERE id = %{identifier}s ORDER BY modified ASC"
             cursor.execute(sql, {'identifier': identifier})
             result = list(self._assemble_result_list(cursor))
             self.connection.commit()
@@ -66,39 +66,63 @@ class Storage:
             result = load(identifier)
         return result
 
+    def load_record_status(self, identifier):
+        cursor = self.connection.cursor()
+        sql = "SELECT id,created,modified,deleted FROM "+self.tname+" WHERE id = %(identifier)s"
+        cursor.execute(sql, { 'identifier': identifier })
+        result = cursor.fetchone()
+        self.connection.commit()
+        if result:
+            return { 'exists': True, 'created' : result[1], 'modified' : result[2], 'deleted': result[3] }
+        return { 'exists': False }
+
 
     # Store methods
+    def _calculate_checksum(self, data):
+        return hashlib.md5(bytes(json.dumps(data, sort_keys=True), 'utf-8')).hexdigest()
+
+
     def store(self, identifier, data, entry):
         try:
+            data.pop('modified', None) # Shouldn't influence checksum
+            data.pop('created', None)
+            entry['checksum'] = self._calculate_checksum(data)
             cursor = self.connection.cursor()
             if self.versioning:
-                insert_version_sql = "INSERT INTO {version_table_name} (id,checksum,data,entry,ts) SELECT %(identifier)s,%(checksum)s,%(data)s,%(entry)s,%(ts)s WHERE NOT EXISTS (SELECT 1 FROM {version_table_name} WHERE id = %(identifier)s AND checksum = %(checksum)s)".format(version_table_name = self.vtname)
+                insert_version_sql = "INSERT INTO {version_table_name} (id,checksum,data,entry) SELECT %(identifier)s,%(checksum)s,%(data)s,%(entry)s WHERE NOT EXISTS (SELECT 1 FROM {version_table_name} WHERE id = %(identifier)s AND checksum = %(checksum)s)".format(version_table_name = self.vtname)
                 cursor.execute(insert_version_sql, {
                         'identifier': identifier,
                         'entry': json.dumps(entry),
                         'data': json.dumps(data),
-                        'checksum': entry['checksum'],
-                        'ts': datetime.fromtimestamp(entry['modified']),
+                        'checksum': entry['checksum']
+                    }
+                )
+                print("Row count", cursor.rowcount)
+
+            if not self.versioning or cursor.rowcount > 0:
+                upsert = """WITH upsert AS (UPDATE {table_name} SET data = %(data)s, modified = %(modified)s, entry = %(entry)s, deleted = %(deleted)s
+                    WHERE id = %(identifier)s RETURNING *)
+                    INSERT INTO {table_name} (id, data, entry, deleted) SELECT %(identifier)s, %(data)s, %(entry)s, %(deleted)s
+                    WHERE NOT EXISTS (SELECT * FROM upsert)""".format(table_name = self.tname)
+                cursor.execute(upsert, {
+                        'identifier': identifier,
+                        'data': json.dumps(data),
+                        'entry': json.dumps(entry),
+                        'modified': datetime.now(),
+                        'deleted': entry.get('deleted', False),
                     }
                 )
 
-            upsert = """WITH upsert AS (UPDATE {table_name} SET data = %(data)s, ts = %(ts)s, entry = %(entry)s, deleted = %(deleted)s
-                WHERE id = %(identifier)s RETURNING *)
-                INSERT INTO {table_name} (id, data, ts, entry, deleted) SELECT %(identifier)s, %(data)s, %(ts)s, %(entry)s, %(deleted)s
-                WHERE NOT EXISTS (SELECT * FROM upsert)""".format(table_name = self.tname)
-            cursor.execute(upsert, {
-                    'identifier': identifier,
-                    'data': json.dumps(data),
-                    'entry': json.dumps(entry),
-                    'ts': datetime.fromtimestamp(entry['modified']),
-                    'deleted': entry.get('deleted', False),
-                }
-            )
-
             self.connection.commit()
+            # Load results from insert
+            status = self.load_record_status(identifier)
+            data['created'] = status['created']
+            data['modified'] = status['modified']
         except Exception as e:
             print("Store failed. Rolling back.", e)
             self.connection.rollback()
             raise e
+
+        return data
 
 
