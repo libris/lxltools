@@ -1,3 +1,4 @@
+-- main table
 CREATE TABLE IF NOT EXISTS lddb (
     id text not null unique primary key,
     data jsonb not null,

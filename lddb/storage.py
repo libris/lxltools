@@ -84,38 +84,44 @@ class Storage:
         return hashlib.md5(bytes(json.dumps(data, sort_keys=True), 'utf-8')).hexdigest()
 
 
+    def _store(self, cursor, identifier, data, entry):
+        data.pop('modified', None) # Shouldn't influence checksum
+        data.pop('created', None)
+        entry['checksum'] = self._calculate_checksum(data)
+        if self.versioning:
+            insert_version_sql = "INSERT INTO {version_table_name} (id,checksum,data,entry) SELECT %(identifier)s,%(checksum)s,%(data)s,%(entry)s WHERE NOT EXISTS (SELECT 1 FROM {version_table_name} WHERE id = %(identifier)s AND checksum = %(checksum)s)".format(version_table_name = self.vtname)
+            cursor.execute(insert_version_sql, {
+                    'identifier': identifier,
+                    'entry': json.dumps(entry),
+                    'data': json.dumps(data),
+                    'checksum': entry['checksum']
+                }
+            )
+            print("Row count", cursor.rowcount)
+
+        if not self.versioning or cursor.rowcount > 0:
+            upsert = """WITH upsert AS (UPDATE {table_name} SET data = %(data)s, modified = %(modified)s, entry = %(entry)s, deleted = %(deleted)s
+                WHERE id = %(identifier)s RETURNING *)
+                INSERT INTO {table_name} (id, data, entry, deleted) SELECT %(identifier)s, %(data)s, %(entry)s, %(deleted)s
+                WHERE NOT EXISTS (SELECT * FROM upsert)""".format(table_name = self.tname)
+            cursor.execute(upsert, {
+                    'identifier': identifier,
+                    'data': json.dumps(data),
+                    'entry': json.dumps(entry),
+                    'modified': datetime.now(),
+                    'deleted': entry.get('deleted', False),
+                }
+            )
+        return (identifier, data, entry)
+
     def store(self, identifier, data, entry):
         try:
-            data.pop('modified', None) # Shouldn't influence checksum
-            data.pop('created', None)
-            entry['checksum'] = self._calculate_checksum(data)
             cursor = self.connection.cursor()
-            if self.versioning:
-                insert_version_sql = "INSERT INTO {version_table_name} (id,checksum,data,entry) SELECT %(identifier)s,%(checksum)s,%(data)s,%(entry)s WHERE NOT EXISTS (SELECT 1 FROM {version_table_name} WHERE id = %(identifier)s AND checksum = %(checksum)s)".format(version_table_name = self.vtname)
-                cursor.execute(insert_version_sql, {
-                        'identifier': identifier,
-                        'entry': json.dumps(entry),
-                        'data': json.dumps(data),
-                        'checksum': entry['checksum']
-                    }
-                )
-                print("Row count", cursor.rowcount)
 
-            if not self.versioning or cursor.rowcount > 0:
-                upsert = """WITH upsert AS (UPDATE {table_name} SET data = %(data)s, modified = %(modified)s, entry = %(entry)s, deleted = %(deleted)s
-                    WHERE id = %(identifier)s RETURNING *)
-                    INSERT INTO {table_name} (id, data, entry, deleted) SELECT %(identifier)s, %(data)s, %(entry)s, %(deleted)s
-                    WHERE NOT EXISTS (SELECT * FROM upsert)""".format(table_name = self.tname)
-                cursor.execute(upsert, {
-                        'identifier': identifier,
-                        'data': json.dumps(data),
-                        'entry': json.dumps(entry),
-                        'modified': datetime.now(),
-                        'deleted': entry.get('deleted', False),
-                    }
-                )
+            self._store(cursor, identifier, data, entry)
 
-            self.connection.commit()
+            (identifier, data, entry) = self.connection.commit()
+
             # Load results from insert
             status = self.load_record_status(identifier)
             data['created'] = status['created']
@@ -126,5 +132,17 @@ class Storage:
             raise e
 
         return data
+
+    def bulk_store(self, items):
+        try:
+            cursor = self.connection.cursor()
+            for item in items:
+                self._store(cursor, item[0], item[1], item[2])
+
+            self.connection.commit()
+        except Exception as e:
+            print("Store failed. Rolling back.", e)
+            self.connection.rollback()
+            raise e
 
 
