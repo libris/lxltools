@@ -1,7 +1,5 @@
 from __future__ import unicode_literals
-
-
-GRAPH, ID, TYPE, REV = '@graph', '@id', '@type', '@reverse'
+from .keys import *
 
 
 def flatten(data):
