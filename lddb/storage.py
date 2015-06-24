@@ -27,11 +27,18 @@ class Storage:
             # Apply rule no 2!
             result[1]['created'] = result[3]
             result[1]['modified'] = result[4]
+            result[2]['created'] = result[3]
+            result[2]['modified'] = result[4]
             return (result[0], result[1], result[2])
         return None
 
     def _assemble_result_list(self, results):
         for result in results:
+            # Apply rule no 2!
+            result[1]['created'] = result[3]
+            result[1]['modified'] = result[4]
+            result[2]['created'] = result[3]
+            result[2]['modified'] = result[4]
             yield (result[0], result[1], result[2])
 
     def load_thing(self, identifier):
@@ -44,6 +51,12 @@ class Storage:
         #result = list(self._assemble_result_list(cursor))
         result = cursor.fetchone()
         self.connection.commit()
+        if result:
+            # Apply rule no 2!
+            result[1]['created'] = result[3]
+            result[1]['modified'] = result[4]
+            result[2]['created'] = result[3]
+            result[2]['modified'] = result[4]
         return result
 
     def load_by_relation(self, relation, identifier):
