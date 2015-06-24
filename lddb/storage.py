@@ -32,13 +32,14 @@ class Storage:
             yield (result[0], result[1], result[2])
 
     def load_thing(self, identifier):
-        """Finds record(s) decribing a thing. Returns a list of tuples containing identifier, data and entry."""
+        """Finds the primary record decribing a thing. Returns a tuple containing identifier, data and entry."""
         cursor = self.connection.cursor()
-        json_query = [{ "@id": identifier }]
+        json_query = [{ "about": {"@id": identifier }}]
 
         sql = "SELECT id,data,entry FROM "+self.tname+" WHERE data->'@graph' @> %(json)s"
         cursor.execute(sql, {'json': json.dumps(json_query)})
-        result = list(self._assemble_result_list(cursor))
+        #result = list(self._assemble_result_list(cursor))
+        result = cursor.fetchone()
         self.connection.commit()
         return result
 
