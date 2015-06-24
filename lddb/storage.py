@@ -20,10 +20,13 @@ class Storage:
     def load(self, identifier):
         """Returns a tuple containing the records identifier, data and entry."""
         cursor = self.connection.cursor()
-        cursor.execute("SELECT id,data,entry FROM {table} WHERE id = '{identifier}'".format(table=self.tname, identifier=identifier))
+        cursor.execute("SELECT id,data,entry,created,modified FROM {table} WHERE id = '{identifier}'".format(table=self.tname, identifier=identifier))
         result = cursor.fetchone()
         self.connection.commit()
         if result:
+            # Apply rule no 2!
+            result[1]['created'] = result[3]
+            result[1]['modified'] = result[4]
             return (result[0], result[1], result[2])
         return None
 
@@ -36,7 +39,7 @@ class Storage:
         cursor = self.connection.cursor()
         json_query = [{ "about": {"@id": identifier }}]
 
-        sql = "SELECT id,data,entry FROM "+self.tname+" WHERE data->'@graph' @> %(json)s"
+        sql = "SELECT id,data,entry,created,modified FROM "+self.tname+" WHERE data->'@graph' @> %(json)s"
         cursor.execute(sql, {'json': json.dumps(json_query)})
         #result = list(self._assemble_result_list(cursor))
         result = cursor.fetchone()
@@ -48,7 +51,7 @@ class Storage:
         json_query = [{relation:{ "@id": identifier }}]
         listed_json_query = [{relation:[{ "@id": identifier }]}]
         print("json_query", json.dumps(json_query))
-        sql = "SELECT id,data,entry FROM "+self.tname+" WHERE data->'@graph' @> %(json)s OR data->'@graph' @> %(listed_json)s"
+        sql = "SELECT id,data,entry,created,modified FROM "+self.tname+" WHERE data->'@graph' @> %(json)s OR data->'@graph' @> %(listed_json)s"
         cursor.execute(sql, {
                 'json': json.dumps(json_query),
                 'listed_json': json.dumps(listed_json_query)
@@ -61,7 +64,7 @@ class Storage:
     def load_all_versions(self, identifier):
         cursor = self.connection.cursor()
         if self.versioning:
-            sql = "SELECT id,data,entry FROM "+self.vtname+" WHERE id = %{identifier}s ORDER BY modified ASC"
+            sql = "SELECT id,data,entry,created,modified FROM "+self.vtname+" WHERE id = %{identifier}s ORDER BY modified ASC"
             cursor.execute(sql, {'identifier': identifier})
             result = list(self._assemble_result_list(cursor))
             self.connection.commit()
