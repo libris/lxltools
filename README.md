@@ -11,16 +11,16 @@ On Mac, use homebrew to install. Make sure you have at least version 9.4.
 
 2. Create a user (optional)
 
-    $ createuser -d -P <username> 
+    $ createuser -d -P \<username\> 
 
 3. Create a database
 
-    $ createdb -E UTF8  -O <user from step 2 (if used)> <databasename>
+    $ createdb -E UTF8  -O \<user from step 2 (if used)\> \<databasename\>
 
 4. Create tables
 
-    $ psql -U <username> <databasename> < config/lddb.sql
+    $ psql -U \<username\> \<databasename\> < config/lddb.sql
 
-If you didn't create a user in step 2, you can ignore the "-U <username> part".
+If you didn't create a user in step 2, you can ignore the "-U \<username\> part".
 
 

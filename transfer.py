@@ -47,8 +47,9 @@ def transfer(**args):
                 print("Failed to convert row {0} to json".format(row[0]), e)
                 raise
 
-        arg_str = ",".join(bytes(writecur.mogrify("(%s,%s,%s,%s,%s,%s)", x)).decode("utf-8") for x in values)
-        writecur.execute("INSERT INTO "+args['totable']+" (id,data,entry,created,modified,deleted) VALUES " + arg_str)
+            arg_str = ",".join(bytes(writecur.mogrify("(%s,%s,%s,%s,%s,%s)", x)).decode("utf-8") for x in values)
+            writecur.execute("INSERT INTO "+args['totable']+" (id,data,entry,created,modified,deleted) VALUES " + arg_str)
+            values = []
         con.commit()
 
 

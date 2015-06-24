@@ -29,6 +29,19 @@ def load_record(record_id):
         abort(404)
     return _json_response(item[1])
 
+def add(identifier, data, entry = {}):
+    # Pseudocode
+    flat_data = ld.flatten(data)
+    expanded_data = expander.expand(data)
+    tripled_data = graphs.triplify(flat_data)
+    try:
+        storage.store(identifier, flat_data, entry)
+        elastic.index(identifier, expanded_data)
+        triplestore.update(identifer, tripled_data)
+    except:
+        storage.rollback()
+        elastic.rollback()
+    return identifier
 
 
 if __name__ == '__main__':
