@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 import json
 from lddb import Storage
-from flask import Flask, abort, request
+from flask import Flask, request, abort, redirect
 
 
 app = Flask(__name__)
@@ -18,14 +18,17 @@ def _json_response(data):
 
 @app.route('/relation')
 def load_by_relation():
-    relation = request.args.get('r')
-    identifier = request.args.get('id')
-    items = [x[1] for x in storage.load_by_relation(relation, identifier)]
+    rel = request.args.get('rel')
+    ref = request.args.get('ref')
+    items = [x[1] for x in storage.load_by_relation(rel, ref)]
     return _json_response(items)
 
 @app.route('/<path:record_id>')
 def load_record(record_id):
     item = storage.load("/"+record_id)
+    if not item:
+        item = storage.load_thing("/"+record_id)
+        return redirect(item[0], 303)
     if not item:
         abort(404)
     return _json_response(item[1])
@@ -46,5 +49,5 @@ def add(identifier, data, entry = {}):
 
 
 if __name__ == '__main__':
-    app.debug = True #app.config['DEBUG']
+    app.debug = app.config['DEBUG']
     app.run(host=app.config['BIND_HOST'], port=app.config['BIND_PORT'])

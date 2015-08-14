@@ -56,7 +56,7 @@ class Storage:
         identifier, data and entry.
         """
         cursor = self.connection.cursor()
-        json_query = [{ "about": {"@id": identifier }}]
+        json_query = [{"@id": identifier}]
 
         sql = """
             SELECT id,data,entry,created,modified FROM {0}
@@ -71,11 +71,10 @@ class Storage:
         else:
             return None
 
-    def load_by_relation(self, relation, identifier):
+    def load_by_relation(self, rel, ref):
         cursor = self.connection.cursor()
-        json_query = [{relation:{ "@id": identifier }}]
-        listed_json_query = [{relation:[{ "@id": identifier }]}]
-        print("json_query", json.dumps(json_query))
+        json_query = [{rel: {"@id": ref}}]
+        listed_json_query = [{rel: [{"@id": ref}]}]
         sql = """
             SELECT id,data,entry,created,modified FROM {0}
             WHERE data->'@graph' @> %(json)s OR data->'@graph' @> %(listed_json)s
@@ -126,9 +125,10 @@ class Storage:
     def _calculate_checksum(self, data):
         return hashlib.md5(json.dumps(data, sort_keys=True).encode('utf-8')).hexdigest()
 
-    def _store(self, cursor, identifier, data, entry):
+    def _store(self, cursor, identifier, data, entry=None):
         data.pop('modified', None) # Shouldn't influence checksum
         data.pop('created', None)
+        entry = entry or {}
         entry['checksum'] = self._calculate_checksum(data)
         if self.versioning:
             insert_version_sql = """
@@ -166,7 +166,7 @@ class Storage:
                 })
         return (identifier, data, entry)
 
-    def store(self, identifier, data, entry):
+    def store(self, identifier, data, entry=None):
         try:
             cursor = self.connection.cursor()
             (identifier, data, entry) = self._store(cursor, identifier, data, entry)
