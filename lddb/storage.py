@@ -32,22 +32,21 @@ class Storage:
         result = cursor.fetchone()
         self.connection.commit()
         if result:
-            # Apply rule no 2!
-            result[1]['created'] = result[3]
-            result[1]['modified'] = result[4]
-            result[2]['created'] = result[3]
-            result[2]['modified'] = result[4]
-            return (result[0], result[1], result[2])
+            return self._rule_2(result)
         return None
 
     def _assemble_result_list(self, results):
         for result in results:
-            # Apply rule no 2!
-            result[1]['created'] = result[3]
-            result[1]['modified'] = result[4]
-            result[2]['created'] = result[3]
-            result[2]['modified'] = result[4]
-            yield (result[0], result[1], result[2])
+            yield self._rule_2(result)
+
+    def _rule_2(self, result):
+        (identifier, data, entry, created, modified) = result
+        # Apply rule no 2!
+        data['created'] = created
+        data['modified'] = modified
+        entry['created'] = created
+        entry['modified'] = modified
+        return (identifier, data, entry)
 
     def load_thing(self, identifier):
         """
@@ -66,12 +65,9 @@ class Storage:
         result = cursor.fetchone()
         self.connection.commit()
         if result:
-            # Apply rule no 2!
-            result[1]['created'] = result[3]
-            result[1]['modified'] = result[4]
-            result[2]['created'] = result[3]
-            result[2]['modified'] = result[4]
-        return result
+            return self._rule_2(result)
+        else:
+            return None
 
     def load_by_relation(self, relation, identifier):
         cursor = self.connection.cursor()
