@@ -1,15 +1,16 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-
 import json
 from lddb import Storage
 from flask import Flask, abort, request
+
 
 app = Flask(__name__)
 app.config.from_pyfile('config.cfg')
 app.secret_key = app.config.get('SESSION_SECRET_KEY')
 
-storage = Storage('lddb', app.config['DBNAME'], app.config['DBHOST'], app.config['DBUSER'], app.config['DBPASSWORD'])
+storage = Storage('lddb', app.config['DBNAME'], app.config['DBHOST'],
+        app.config['DBUSER'], app.config['DBPASSWORD'])
 
 def _json_response(data):
     return json.dumps(data), 200, {'Content-Type':'application/json'}
@@ -47,4 +48,3 @@ def add(identifier, data, entry = {}):
 if __name__ == '__main__':
     app.debug = True #app.config['DEBUG']
     app.run(host=app.config['BIND_HOST'], port=app.config['BIND_PORT'])
-
