@@ -42,6 +42,8 @@ class Storage:
     def _rule_2(self, result):
         (identifier, data, entry, created, modified) = result
         # Apply rule no 2!
+        created = created.isoformat()
+        modified = modified.isoformat()
         data['created'] = created
         data['modified'] = modified
         entry['created'] = created
