@@ -122,7 +122,7 @@ class Storage:
     # Store methods
 
     def _calculate_checksum(self, data):
-        return hashlib.md5(bytes(json.dumps(data, sort_keys=True), 'utf-8')).hexdigest()
+        return hashlib.md5(json.dumps(data, sort_keys=True).encode('utf-8')).hexdigest()
 
     def _store(self, cursor, identifier, data, entry):
         data.pop('modified', None) # Shouldn't influence checksum
@@ -167,8 +167,8 @@ class Storage:
     def store(self, identifier, data, entry):
         try:
             cursor = self.connection.cursor()
-            self._store(cursor, identifier, data, entry)
-            (identifier, data, entry) = self.connection.commit()
+            (identifier, data, entry) = self._store(cursor, identifier, data, entry)
+            self.connection.commit()
 
             # Load results from insert
             status = self.load_record_status(identifier)
@@ -177,7 +177,7 @@ class Storage:
         except Exception as e:
             print("Store failed. Rolling back.", e)
             self.connection.rollback()
-            raise e
+            raise
 
         return data
 
