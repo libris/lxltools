@@ -22,11 +22,11 @@ class Storage:
 
     def load(self, identifier):
         """
-        Returns a tuple containing the records identifier, data and entry.
+        Returns a tuple containing the records identifier, data and manifest.
         """
         cursor = self.connection.cursor()
         cursor.execute("""
-                SELECT id,data,entry,created,modified FROM {0}
+                SELECT id,data,manifest,created,modified FROM {0}
                 WHERE id = '{1}'
                 """.format(self.tname, identifier))
         result = cursor.fetchone()
@@ -40,27 +40,27 @@ class Storage:
             yield self._rule_2(result)
 
     def _rule_2(self, result):
-        (identifier, data, entry, created, modified) = result
+        (identifier, data, manifest, created, modified) = result
         # Apply rule no 2!
         created = created.isoformat()
         modified = modified.isoformat()
         data['created'] = created
         data['modified'] = modified
-        entry['created'] = created
-        entry['modified'] = modified
-        return (identifier, data, entry)
+        manifest['created'] = created
+        manifest['modified'] = modified
+        return (identifier, data, manifest)
 
     def load_thing(self, identifier):
         """
         Finds the primary record decribing a thing. Returns a tuple containing
-        identifier, data and entry.
+        identifier, data and manifest.
         """
         cursor = self.connection.cursor()
         json_query = [{"@id": identifier}]
 
         sql = """
-            SELECT id,data,entry,created,modified FROM {0}
-            WHERE data->'@graph' @> %(json)s
+            SELECT id,data,manifest,created,modified FROM {0}
+            WHERE data->'items' @> %(json)s
             """.format(self.tname)
         cursor.execute(sql, {'json': json.dumps(json_query)})
         #result = list(self._assemble_result_list(cursor))
@@ -76,8 +76,9 @@ class Storage:
         json_query = [{rel: {"@id": ref}}]
         listed_json_query = [{rel: [{"@id": ref}]}]
         sql = """
-            SELECT id,data,entry,created,modified FROM {0}
-            WHERE data->'@graph' @> %(json)s OR data->'@graph' @> %(listed_json)s
+            SELECT id,data,manifest,created,modified FROM {0}
+            WHERE data->'entry' @> %(json)s OR data->'entry' @> %(listed_json)s
+            OR data->'items' @> %(json)s OR data->'items' @> %(listed_json)s
             """.format(self.tname)
         cursor.execute(sql, {
                 'json': json.dumps(json_query),
@@ -91,7 +92,7 @@ class Storage:
         cursor = self.connection.cursor()
         if self.versioning:
             sql = """
-                SELECT id,data,entry,created,modified FROM {0}
+                SELECT id,data,manifest,created,modified FROM {0}
                 WHERE id = %{identifier}s ORDER BY modified ASC
                 """.format( self.vtname)
             cursor.execute(sql, {'identifier': identifier})
@@ -125,23 +126,23 @@ class Storage:
     def _calculate_checksum(self, data):
         return hashlib.md5(json.dumps(data, sort_keys=True).encode('utf-8')).hexdigest()
 
-    def _store(self, cursor, identifier, data, entry=None):
+    def _store(self, cursor, identifier, data, manifest=None):
         data.pop('modified', None) # Shouldn't influence checksum
         data.pop('created', None)
-        entry = entry or {}
-        entry['checksum'] = self._calculate_checksum(data)
+        manifest = manifest or {}
+        manifest['checksum'] = self._calculate_checksum(data)
         if self.versioning:
             insert_version_sql = """
-                    INSERT INTO {0} (id,checksum,data,entry)
-                    SELECT %(identifier)s,%(checksum)s,%(data)s,%(entry)s
+                    INSERT INTO {0} (id,checksum,data,manifest)
+                    SELECT %(identifier)s,%(checksum)s,%(data)s,%(manifest)s
                     WHERE NOT EXISTS (SELECT 1 FROM {0}
                     WHERE id = %(identifier)s AND checksum = %(checksum)s)
                     """.format(self.vtname)
             cursor.execute(insert_version_sql, {
                     'identifier': identifier,
-                    'entry': json.dumps(entry),
+                    'manifest': json.dumps(manifest),
                     'data': json.dumps(data),
-                    'checksum': entry['checksum']
+                    'checksum': manifest['checksum']
                 })
             print("Row count", cursor.rowcount)
 
@@ -150,26 +151,26 @@ class Storage:
                     WITH upsert AS (UPDATE {0}
                                     SET data = %(data)s,
                                     modified = %(modified)s,
-                                    entry = %(entry)s,
+                                    manifest = %(manifest)s,
                                     deleted = %(deleted)s
                                     WHERE id = %(identifier)s RETURNING *)
-                    INSERT INTO {0} (id, data, entry, deleted)
-                    SELECT %(identifier)s, %(data)s, %(entry)s, %(deleted)s
+                    INSERT INTO {0} (id, data, manifest, deleted)
+                    SELECT %(identifier)s, %(data)s, %(manifest)s, %(deleted)s
                     WHERE NOT EXISTS (SELECT * FROM upsert)
                     """.format(self.tname)
             cursor.execute(upsert, {
                     'identifier': identifier,
                     'data': json.dumps(data),
-                    'entry': json.dumps(entry),
+                    'manifest': json.dumps(manifest),
                     'modified': datetime.now(),
-                    'deleted': entry.get('deleted', False),
+                    'deleted': manifest.get('deleted', False),
                 })
-        return (identifier, data, entry)
+        return (identifier, data, manifest)
 
-    def store(self, identifier, data, entry=None):
+    def store(self, identifier, data, manifest=None):
         try:
             cursor = self.connection.cursor()
-            (identifier, data, entry) = self._store(cursor, identifier, data, entry)
+            (identifier, data, manifest) = self._store(cursor, identifier, data, manifest)
             self.connection.commit()
 
             # Load results from insert

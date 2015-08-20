@@ -23,15 +23,20 @@ def load_by_relation():
     items = [x[1] for x in storage.load_by_relation(rel, ref)]
     return _json_response(items)
 
+@app.route('/favicon.ico')
+def favicon():
+    abort(404)
+
 @app.route('/<path:record_id>')
 def load_record(record_id):
-    item = storage.load("/"+record_id)
-    if not item:
-        item = storage.load_thing("/"+record_id)
-        return redirect(item[0], 303)
-    if not item:
+    result = storage.load("/"+record_id)
+    if result:
+        return _json_response(result[1])
+    result = storage.load_thing("/"+record_id)
+    if result:
+        return redirect(result[0], 303)
+    else:
         abort(404)
-    return _json_response(item[1])
 
 def add(identifier, data, entry = {}):
     # Pseudocode
