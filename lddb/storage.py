@@ -8,6 +8,10 @@ from datetime import datetime
 import collections
 
 
+MAX_LIMIT = 1000
+DEFAULT_LIMIT = 100
+
+
 class Storage:
 
     def __init__(self, base_table, database, host, user, password):
@@ -56,13 +60,13 @@ class Storage:
         identifier, data and manifest.
         """
         cursor = self.connection.cursor()
-        json_query = [{"@id": identifier}]
+        id_query = '[{"@id": "%s"}]' % identifier
 
         sql = """
             SELECT id,data,manifest,created,modified FROM {0}
-            WHERE data->'items' @> %(json)s
+            WHERE data->'descriptions'->'items' @> %(id_query)s
             """.format(self.tname)
-        cursor.execute(sql, {'json': json.dumps(json_query)})
+        cursor.execute(sql, {'id_query': id_query})
         #result = list(self._assemble_result_list(cursor))
         result = cursor.fetchone()
         self.connection.commit()
@@ -71,19 +75,24 @@ class Storage:
         else:
             return None
 
-    def load_by_relation(self, rel, ref):
+    def load_by_relation(self, rel, ref, limit=None, offset=None):
+        limit = limit if limit is not None and limit < MAX_LIMIT else DEFAULT_LIMIT
+        offset = offset if offset is not None else 0
         cursor = self.connection.cursor()
-        json_query = [{rel: {"@id": ref}}]
-        listed_json_query = [{rel: [{"@id": ref}]}]
+        ref_query = '{"%s": {"@id": "%s"}}' % (rel, ref)
+        refs_query = '{"%s": [{"@id": "%s"}]}' % (rel, ref)
         sql = """
             SELECT id,data,manifest,created,modified FROM {0}
-            WHERE data->'entry' @> %(json)s OR data->'entry' @> %(listed_json)s
-            OR data->'items' @> %(json)s OR data->'items' @> %(listed_json)s
-            """.format(self.tname)
-        cursor.execute(sql, {
-                'json': json.dumps(json_query),
-                'listed_json': json.dumps(listed_json_query)
-            })
+            WHERE data->'descriptions'->'entry' @> %(ref_query)s
+                OR data->'descriptions'->'entry' @> %(refs_query)s
+                OR data->'descriptions'->'items' @> %(set_ref_query)s
+                OR data->'descriptions'->'items' @> %(set_refs_query)s
+            LIMIT {1} OFFSET {2}
+            """.format(self.tname, limit, offset)
+        keys = {'ref_query': ref_query, 'refs_query': refs_query,
+                'set_ref_query': '[%s]' % ref_query, 'set_refs_query': '[%s]' % refs_query}
+        print(keys)
+        cursor.execute(sql, keys)
         result = list(self._assemble_result_list(cursor))
         self.connection.commit()
         return result

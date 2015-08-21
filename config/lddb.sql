@@ -11,8 +11,8 @@ CREATE TABLE IF NOT EXISTS lddb (
 CREATE INDEX idx_lddb_alive ON lddb (id) WHERE deleted IS NOT true;
 CREATE INDEX idx_lddb_modified ON lddb (modified);
 CREATE INDEX idx_lddb_manifest ON lddb USING GIN (manifest jsonb_path_ops);
-CREATE INDEX idx_lddb_entry ON lddb USING GIN ((data->'entry') jsonb_path_ops);
-CREATE INDEX idx_lddb_items ON lddb USING GIN ((data->'items') jsonb_path_ops);
+CREATE INDEX idx_lddb_entry ON lddb USING GIN ((data->'descriptions'->'entry') jsonb_path_ops);
+CREATE INDEX idx_lddb_items ON lddb USING GIN ((data->'descriptions'->'items') jsonb_path_ops);
 CREATE INDEX idx_lddb_dataset ON lddb USING GIN ((manifest->'dataset') jsonb_path_ops);
 
 

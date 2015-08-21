@@ -27,7 +27,13 @@ def _json_response(data):
 def load_by_relation():
     rel = request.args.get('rel')
     ref = request.args.get('ref')
-    items = [x[1] for x in storage.load_by_relation(rel, ref)]
+    limit = request.args.get('limit')
+    offset = request.args.get('offset')
+    if limit and limit.isdigit():
+        limit = int(limit)
+    if offset and offset.isdigit():
+        offset = int(offset)
+    items = [x[1] for x in storage.load_by_relation(rel, ref, limit, offset)]
     return _json_response(items)
 
 @app.route('/context.jsonld')
