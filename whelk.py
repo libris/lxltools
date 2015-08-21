@@ -2,18 +2,25 @@
 # -*- coding: utf-8 -*-
 import json
 from lddb import Storage
-from flask import Flask, request, abort, redirect
+from flask import Flask, request, abort, redirect, send_file
+
+
+MIMETYPE_JSON = 'application/json'
+MIMETYPE_JSONLD = 'application/ld+json'
 
 
 app = Flask(__name__)
 app.config.from_pyfile('config.cfg')
 app.secret_key = app.config.get('SESSION_SECRET_KEY')
 
+context_file = app.config.get('JSONLD_CONTEXT_FILE')
+context_link = '</context.jsonld>; rel="http://www.w3.org/ns/json-ld#context"'
+
 storage = Storage('lddb', app.config['DBNAME'], app.config['DBHOST'],
         app.config['DBUSER'], app.config['DBPASSWORD'])
 
 def _json_response(data):
-    return json.dumps(data), 200, {'Content-Type':'application/json'}
+    return json.dumps(data), 200, {'Content-Type': MIMETYPE_JSON, 'Link': context_link}
 
 
 @app.route('/relation')
@@ -22,6 +29,10 @@ def load_by_relation():
     ref = request.args.get('ref')
     items = [x[1] for x in storage.load_by_relation(rel, ref)]
     return _json_response(items)
+
+@app.route('/context.jsonld')
+def jsonld_context():
+    return send_file(context_file, mimetype=MIMETYPE_JSONLD)
 
 @app.route('/favicon.ico')
 def favicon():
