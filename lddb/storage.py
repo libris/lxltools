@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
-import psycopg2
-import json
-import hashlib
 from datetime import datetime
-import collections
+import hashlib
+import json
+from collections import namedtuple
+
+import psycopg2
 
 
 MAX_LIMIT = 1000
@@ -24,94 +25,115 @@ class Storage:
 
     # Load-methods
 
-    def load(self, identifier):
-        """
-        Returns a tuple containing the records identifier, data and manifest.
-        """
+    def get_record(self, identifier):# -> Record
         cursor = self.connection.cursor()
         cursor.execute("""
-                SELECT id,data,manifest,created,modified FROM {0}
+                SELECT id, data, manifest, created, modified FROM {0}
                 WHERE id = '{1}'
                 """.format(self.tname, identifier))
         result = cursor.fetchone()
         self.connection.commit()
         if result:
-            return self._rule_2(result)
+            return self._inject_storage_data(result)
         return None
 
-    def _assemble_result_list(self, results):
-        for result in results:
-            yield self._rule_2(result)
-
-    def _rule_2(self, result):
-        (identifier, data, manifest, created, modified) = result
-        # Apply rule no 2!
-        created = created.isoformat()
-        modified = modified.isoformat()
-        data['created'] = created
-        data['modified'] = modified
-        manifest['created'] = created
-        manifest['modified'] = modified
-        return (identifier, data, manifest)
-
-    def load_thing(self, identifier):
+    def find_record_ids(self, identifier):
         """
-        Finds the primary record decribing a thing. Returns a tuple containing
-        identifier, data and manifest.
+        Get the record ids containing a description of the given identifier.
         """
         cursor = self.connection.cursor()
-        id_query = '[{"@id": "%s"}]' % identifier
-
+        id_query = '{"@id": "%s"}' % identifier
+        ids_query = '[%s]' % id_query
         sql = """
-            SELECT id,data,manifest,created,modified FROM {0}
-            WHERE data->'descriptions'->'items' @> %(id_query)s
+            SELECT id FROM {0}
+            WHERE data->'descriptions'->'items' @> %(ids_query)s
+                OR data->'descriptions'->'entry' @> %(id_query)s
             """.format(self.tname)
-        cursor.execute(sql, {'id_query': id_query})
-        #result = list(self._assemble_result_list(cursor))
-        result = cursor.fetchone()
-        self.connection.commit()
-        if result:
-            return self._rule_2(result)
-        else:
-            return None
+        cursor.execute(sql, {
+                'identifier': identifier,
+                'ids_query': ids_query,
+                'id_query': id_query})
+        for rec_id, in cursor:
+            yield rec_id
 
-    def load_by_relation(self, rel, ref, limit=None, offset=None):
-        limit = limit if limit is not None and limit < MAX_LIMIT else DEFAULT_LIMIT
-        offset = offset if offset is not None else 0
+    def find_by_relation(self, rel, ref, limit=None, offset=None):
+        limit, offset = self._limit_offset(limit, offset)
         cursor = self.connection.cursor()
         ref_query = '{"%s": {"@id": "%s"}}' % (rel, ref)
         refs_query = '{"%s": [{"@id": "%s"}]}' % (rel, ref)
         sql = """
-            SELECT id,data,manifest,created,modified FROM {0}
+            SELECT id, data, manifest, created, modified FROM {0}
             WHERE data->'descriptions'->'entry' @> %(ref_query)s
                 OR data->'descriptions'->'entry' @> %(refs_query)s
                 OR data->'descriptions'->'items' @> %(set_ref_query)s
                 OR data->'descriptions'->'items' @> %(set_refs_query)s
             LIMIT {1} OFFSET {2}
             """.format(self.tname, limit, offset)
-        keys = {'ref_query': ref_query, 'refs_query': refs_query,
-                'set_ref_query': '[%s]' % ref_query, 'set_refs_query': '[%s]' % refs_query}
-        print(keys)
+        keys = {'ref_query': ref_query,
+                'refs_query': refs_query,
+                'set_ref_query': '[%s]' % ref_query,
+                'set_refs_query': '[%s]' % refs_query}
         cursor.execute(sql, keys)
         result = list(self._assemble_result_list(cursor))
         self.connection.commit()
         return result
 
-    def load_all_versions(self, identifier):
+    def find_by_quotation(self, identifier, limit=None, offset=None):
+        """
+        Find records that reference the given identifier by quotation.
+        """
+        limit, offset = self._limit_offset(limit, offset)
+        cursor = self.connection.cursor()
+        ref_query = '[{"@graph": {"@id": "%s"}}]' % identifier
+        sql = """
+            SELECT id, data, manifest, created, modified FROM {0}
+            WHERE data->'descriptions'->'quoted' @> %(ref_query)s
+            LIMIT {1} OFFSET {2}
+            """.format(self.tname, limit, offset)
+        cursor.execute(sql, {'ref_query': ref_query})
+        result = list(self._assemble_result_list(cursor))
+        self.connection.commit()
+        return result
+
+    def _limit_offset(self, limit, offset):
+        limit = limit if limit is not None and limit < MAX_LIMIT else DEFAULT_LIMIT
+        offset = offset if offset is not None else 0
+        return limit, offset
+
+    def get_all_versions(self, identifier):
         cursor = self.connection.cursor()
         if self.versioning:
             sql = """
-                SELECT id,data,manifest,created,modified FROM {0}
+                SELECT id, data, manifest, created, modified FROM {0}
                 WHERE id = %{identifier}s ORDER BY modified ASC
                 """.format( self.vtname)
             cursor.execute(sql, {'identifier': identifier})
             result = list(self._assemble_result_list(cursor))
             self.connection.commit()
         else:
-            result = load(identifier)
+            result = self.get_record(identifier)
         return result
 
-    def load_record_status(self, identifier):
+    def _inject_storage_data(self, result):
+        """
+        Manifested columns such as timestamps aren't redundantly stored within
+        the dynamic data. This method injects those details into the result.
+        """
+        (identifier, data, manifest, created, modified) = result
+        created = created.isoformat()
+        modified = modified.isoformat()
+        manifest['created'] = created
+        manifest['modified'] = modified
+        #entry = data['descriptions'].get('entry') or data
+        #entry['created'] = created
+        #entry['modified'] = modified
+        return Record(identifier, data, manifest)
+
+    def _assemble_result_list(self, results):
+        for result in results:
+            yield self._inject_storage_data(result)
+
+    def get_record_status(self, identifier):
         cursor = self.connection.cursor()
         sql = """
             SELECT id,created,modified,deleted FROM {0}
@@ -183,7 +205,7 @@ class Storage:
             self.connection.commit()
 
             # Load results from insert
-            status = self.load_record_status(identifier)
+            status = self.get_record_status(identifier)
             data['created'] = status['created']
             data['modified'] = status['modified']
         except Exception as e:
@@ -204,3 +226,6 @@ class Storage:
             print("Store failed. Rolling back.", e)
             self.connection.rollback()
             raise e
+
+
+Record = namedtuple('Record', 'identifier, data, manifest')
