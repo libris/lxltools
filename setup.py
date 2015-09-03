@@ -1,7 +1,12 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8 -*-
+from os import path as P
 from setuptools import setup
 import lddb
+
+
+with open(P.join(P.dirname(__file__), 'requirements.txt')) as fp:
+    requirements = [l.rstrip() for l in fp.readlines()]
 
 setup(
     name = "LDDB",
@@ -22,5 +27,6 @@ setup(
     platforms = ["any"],
     packages = ["lddb"],
     include_package_data = True,
+    install_requires = requirements,
     test_suite = 'nose.collector'
 )
