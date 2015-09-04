@@ -84,13 +84,16 @@ class Storage:
         """
         limit, offset = self._limit_offset(limit, offset)
         cursor = self.connection.cursor()
-        ref_query = '[{"@graph": {"@id": "%s"}}]' % identifier
         sql = """
             SELECT id, data, manifest, created, modified FROM {0}
             WHERE data->'descriptions'->'quoted' @> %(ref_query)s
+                OR data->'descriptions'->'quoted' @> %(sameas_query)s
             LIMIT {1} OFFSET {2}
             """.format(self.tname, limit, offset)
-        cursor.execute(sql, {'ref_query': ref_query})
+        cursor.execute(sql, {
+                'ref_query': '[{"@graph": {"@id": "%s"}}]' % identifier,
+                'sameas_query': '[{"@graph": {"sameAs": [{"@id": "%s"}]}}]' % identifier
+                })
         result = list(self._assemble_result_list(cursor))
         self.connection.commit()
         return result
