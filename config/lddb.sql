@@ -13,6 +13,7 @@ CREATE INDEX idx_lddb_modified ON lddb (modified);
 CREATE INDEX idx_lddb_manifest ON lddb USING GIN (manifest jsonb_path_ops);
 CREATE INDEX idx_lddb_entry ON lddb USING GIN ((data->'descriptions'->'entry') jsonb_path_ops);
 CREATE INDEX idx_lddb_items ON lddb USING GIN ((data->'descriptions'->'items') jsonb_path_ops);
+CREATE INDEX idx_lddb_quoted ON lddb USING GIN ((data->'descriptions'->'quoted') jsonb_path_ops);
 CREATE INDEX idx_lddb_dataset ON lddb USING GIN ((manifest->'dataset') jsonb_path_ops);
 
 
