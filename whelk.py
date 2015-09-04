@@ -39,14 +39,14 @@ def find_by_relation():
     rel = request.args.get('rel')
     ref = request.args.get('ref')
     limit, offset = _get_limit_offset(request.args)
-    items = [x[1] for x in storage.find_by_relation(rel, ref, limit, offset)]
+    items = [rec.data for rec in storage.find_by_relation(rel, ref, limit, offset)]
     return _json_response(items)
 
 @app.route('/quotation')
 def find_by_quotation():
     ref = request.args.get('ref')
     limit, offset = _get_limit_offset(request.args)
-    items = [x[1] for x in storage.find_by_quotation(ref, limit, offset)]
+    items = [rec.data for rec in storage.find_by_quotation(ref, limit, offset)]
     return _json_response(items)
 
 @app.route('/context.jsonld')
