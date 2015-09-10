@@ -57,45 +57,72 @@ class Storage:
             yield rec_id
 
     def find_by_relation(self, rel, ref, limit=None, offset=None):
-        limit, offset = self._limit_offset(limit, offset)
-        cursor = self.connection.cursor()
         ref_query = '{"%s": {"@id": "%s"}}' % (rel, ref)
         refs_query = '{"%s": [{"@id": "%s"}]}' % (rel, ref)
         sql = """
-            SELECT id, data, manifest, created, modified FROM {0}
+            SELECT id, data, manifest, created, modified FROM {tname}
             WHERE data->'descriptions'->'entry' @> %(ref_query)s
                 OR data->'descriptions'->'entry' @> %(refs_query)s
                 OR data->'descriptions'->'items' @> %(set_ref_query)s
                 OR data->'descriptions'->'items' @> %(set_refs_query)s
-            LIMIT {1} OFFSET {2}
-            """.format(self.tname, limit, offset)
+            LIMIT {limit} OFFSET {offset}
+            """
         keys = {'ref_query': ref_query,
                 'refs_query': refs_query,
                 'set_ref_query': '[%s]' % ref_query,
                 'set_refs_query': '[%s]' % refs_query}
-        cursor.execute(sql, keys)
-        result = list(self._assemble_result_list(cursor))
-        self.connection.commit()
-        return result
+        return self._do_find(sql, keys, limit, offset)
 
     def find_by_quotation(self, identifier, limit=None, offset=None):
         """
         Find records that reference the given identifier by quotation.
         """
-        limit, offset = self._limit_offset(limit, offset)
-        cursor = self.connection.cursor()
         sql = """
-            SELECT id, data, manifest, created, modified FROM {0}
+            SELECT id, data, manifest, created, modified FROM {tname}
             WHERE data->'descriptions'->'quoted' @> %(ref_query)s
                 OR data->'descriptions'->'quoted' @> %(sameas_query)s
-            LIMIT {1} OFFSET {2}
-            """.format(self.tname, limit, offset)
-        cursor.execute(sql, {
-                'ref_query': '[{"@graph": {"@id": "%s"}}]' % identifier,
-                'sameas_query': '[{"@graph": {"sameAs": [{"@id": "%s"}]}}]' % identifier
-                })
-        result = list(self._assemble_result_list(cursor))
-        self.connection.commit()
+            LIMIT {limit} OFFSET {offset}
+            """
+        keys = {'ref_query': '[{"@graph": {"@id": "%s"}}]' % identifier,
+                'sameas_query': '[{"@graph": {"sameAs": [{"@id": "%s"}]}}]' % identifier}
+        return self._do_find(sql, keys, limit, offset)
+
+    def find_by_value(self, p, value, limit=None, offset=None):
+        value_query = '{"%s": "%s"}' % (p, value)
+        values_query = '{"%s": ["%s"]}' % (p, value)
+        sql = """
+            SELECT id, data, manifest, created, modified FROM {tname}
+            WHERE data->'descriptions'->'entry' @> %(value_query)s
+                OR data->'descriptions'->'entry' @> %(values_query)s
+                OR data->'descriptions'->'items' @> %(set_value_query)s
+                OR data->'descriptions'->'items' @> %(set_values_query)s
+            LIMIT {limit} OFFSET {offset}
+            """
+        keys = {'value_query': value_query,
+                'values_query': values_query,
+                'set_value_query': '[%s]' % value_query,
+                'set_values_query': '[%s]' % values_query}
+        return self._do_find(sql, keys, limit, offset)
+
+    def find_by_query(self, p, q, limit=None, offset=None):
+        # NOTE: ILIKE is *really* slow, if we keep this, index expected property queries
+        sql = """
+            SELECT id, data, manifest, created, modified FROM {tname}
+            WHERE data->'descriptions'->'entry'->>%(p)s ILIKE %(q)s
+            LIMIT {limit} OFFSET {offset}
+            """
+        keys = {'p': p, 'q': '%'+ q +'%'}
+        return self._do_find(sql, keys, limit, offset)
+
+    def _do_find(self, sql, keys, limit, offset):
+        limit, offset = self._limit_offset(limit, offset)
+        sql = sql.format(tname=self.tname, limit=limit, offset=offset)
+        cursor = self.connection.cursor()
+        try:
+            cursor.execute(sql, keys)
+            result = list(self._assemble_result_list(cursor))
+        finally:
+            self.connection.commit()
         return result
 
     def _limit_offset(self, limit, offset):

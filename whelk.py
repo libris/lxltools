@@ -25,8 +25,8 @@ def _json_response(data):
     return json.dumps(data), 200, {'Content-Type': MIMETYPE_JSON, 'Link': context_link}
 
 def _get_limit_offset(args):
-    limit = request.args.get('limit')
-    offset = request.args.get('offset')
+    limit = args.get('limit')
+    offset = args.get('offset')
     if limit and limit.isdigit():
         limit = int(limit)
     if offset and offset.isdigit():
@@ -34,19 +34,27 @@ def _get_limit_offset(args):
     return limit, offset
 
 
-@app.route('/relation')
-def find_by_relation():
-    rel = request.args.get('rel')
-    ref = request.args.get('ref')
+@app.route('/find')
+def find():
+    #s = request.args.get('s')
+    p = request.args.get('p')
+    o = request.args.get('o')
+    value = request.args.get('value')
+    #language = request.args.get('language')
+    #datatype = request.args.get('datatype')
+    q = request.args.get('q')
     limit, offset = _get_limit_offset(request.args)
-    items = [rec.data for rec in storage.find_by_relation(rel, ref, limit, offset)]
-    return _json_response(items)
-
-@app.route('/quotation')
-def find_by_quotation():
-    ref = request.args.get('ref')
-    limit, offset = _get_limit_offset(request.args)
-    items = [rec.data for rec in storage.find_by_quotation(ref, limit, offset)]
+    records = []
+    if p:
+        if o:
+            records = storage.find_by_relation(p, o, limit, offset)
+        elif value:
+            records = storage.find_by_value(p, value, limit, offset)
+        elif q:
+            records = storage.find_by_query(p, q, limit, offset)
+    elif o:
+        records = storage.find_by_quotation(o, limit, offset)
+    items = [rec.data for rec in records]
     return _json_response(items)
 
 @app.route('/context.jsonld')
