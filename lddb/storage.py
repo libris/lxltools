@@ -1,12 +1,16 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
+import logging
 from datetime import datetime
 import hashlib
 import json
 from collections import namedtuple
 
 import psycopg2
+
+
+logger = logging.getLogger(__name__)
 
 
 MAX_LIMIT = 1000
@@ -205,7 +209,7 @@ class Storage:
                     'data': json.dumps(data),
                     'checksum': manifest['checksum']
                 })
-            print("Row count", cursor.rowcount)
+            logger.debug("Row count: %s", cursor.rowcount)
 
         if not self.versioning or cursor.rowcount > 0:
             upsert = """
@@ -239,7 +243,7 @@ class Storage:
             data['created'] = status['created']
             data['modified'] = status['modified']
         except Exception as e:
-            print("Store failed. Rolling back.", e)
+            logger.error("Store failed. Rolling back.", exc_info=True)
             self.connection.rollback()
             raise
 
@@ -253,9 +257,9 @@ class Storage:
 
             self.connection.commit()
         except Exception as e:
-            print("Store failed. Rolling back.", e)
+            logger.error("Store failed. Rolling back.", exc_info=True)
             self.connection.rollback()
-            raise e
+            raise
 
 
 Record = namedtuple('Record', 'identifier, data, manifest')

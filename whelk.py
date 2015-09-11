@@ -81,6 +81,7 @@ def get_record(path):
     abort(404)
 
 def add(identifier, data, entry = {}):
+    raise NotImplementedError
     # Pseudocode
     flat_data = ld.flatten(data)
     expanded_data = expander.expand(data)
