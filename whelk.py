@@ -5,16 +5,8 @@ from lddb.storage import Storage
 from flask import Flask, request, abort, redirect, send_file
 
 
-MIMETYPE_JSON = 'application/json'
-MIMETYPE_JSONLD = 'application/ld+json'
-
-
 app = Flask(__name__)
 app.config.from_pyfile('config.cfg')
-
-
-context_file = app.config.get('JSONLD_CONTEXT_FILE')
-context_link = '</context.jsonld>; rel="http://www.w3.org/ns/json-ld#context"'
 
 
 storage = Storage('lddb', app.config['DBNAME'], app.config['DBHOST'],
@@ -22,7 +14,7 @@ storage = Storage('lddb', app.config['DBNAME'], app.config['DBHOST'],
 
 
 def _json_response(data):
-    return json.dumps(data), 200, {'Content-Type': MIMETYPE_JSON, 'Link': context_link}
+    return json.dumps(data), 200, {'Content-Type': 'application/json'}
 
 def _get_limit_offset(args):
     limit = args.get('limit')
@@ -56,10 +48,6 @@ def find():
         records = storage.find_by_quotation(o, limit, offset)
     items = [rec.data for rec in records]
     return _json_response(items)
-
-@app.route('/context.jsonld')
-def jsonld_context():
-    return send_file(context_file, mimetype=MIMETYPE_JSONLD)
 
 @app.route('/favicon.ico')
 def favicon():
