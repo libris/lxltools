@@ -13,8 +13,8 @@ import psycopg2
 logger = logging.getLogger(__name__)
 
 
-MAX_LIMIT = 1000
-DEFAULT_LIMIT = 100
+MAX_LIMIT = 4000
+DEFAULT_LIMIT = 200
 
 
 class Storage:
@@ -63,64 +63,62 @@ class Storage:
     def find_by_relation(self, rel, ref, limit=None, offset=None):
         ref_query = '{"%s": {"@id": "%s"}}' % (rel, ref)
         refs_query = '{"%s": [{"@id": "%s"}]}' % (rel, ref)
-        sql = """
-            SELECT id, data, manifest, created, modified FROM {tname}
-            WHERE data->'descriptions'->'entry' @> %(ref_query)s
-                OR data->'descriptions'->'entry' @> %(refs_query)s
-                OR data->'descriptions'->'items' @> %(set_ref_query)s
-                OR data->'descriptions'->'items' @> %(set_refs_query)s
-            LIMIT {limit} OFFSET {offset}
+        where = """
+            data->'descriptions'->'entry' @> %(ref_query)s
+            OR data->'descriptions'->'entry' @> %(refs_query)s
+            OR data->'descriptions'->'items' @> %(set_ref_query)s
+            OR data->'descriptions'->'items' @> %(set_refs_query)s
             """
         keys = {'ref_query': ref_query,
                 'refs_query': refs_query,
                 'set_ref_query': '[%s]' % ref_query,
                 'set_refs_query': '[%s]' % refs_query}
-        return self._do_find(sql, keys, limit, offset)
+        return self._do_find(where, keys, limit, offset)
 
     def find_by_quotation(self, identifier, limit=None, offset=None):
         """
         Find records that reference the given identifier by quotation.
         """
-        sql = """
-            SELECT id, data, manifest, created, modified FROM {tname}
-            WHERE data->'descriptions'->'quoted' @> %(ref_query)s
-                OR data->'descriptions'->'quoted' @> %(sameas_query)s
-            LIMIT {limit} OFFSET {offset}
+        where = """
+            data->'descriptions'->'quoted' @> %(ref_query)s
+            OR data->'descriptions'->'quoted' @> %(sameas_query)s
             """
         keys = {'ref_query': '[{"@graph": {"@id": "%s"}}]' % identifier,
                 'sameas_query': '[{"@graph": {"sameAs": [{"@id": "%s"}]}}]' % identifier}
-        return self._do_find(sql, keys, limit, offset)
+        return self._do_find(where, keys, limit, offset)
 
     def find_by_value(self, p, value, limit=None, offset=None):
         value_query = '{"%s": "%s"}' % (p, value)
         values_query = '{"%s": ["%s"]}' % (p, value)
-        sql = """
-            SELECT id, data, manifest, created, modified FROM {tname}
-            WHERE data->'descriptions'->'entry' @> %(value_query)s
-                OR data->'descriptions'->'entry' @> %(values_query)s
-                OR data->'descriptions'->'items' @> %(set_value_query)s
-                OR data->'descriptions'->'items' @> %(set_values_query)s
-            LIMIT {limit} OFFSET {offset}
+        where = """
+            data->'descriptions'->'entry' @> %(value_query)s
+            OR data->'descriptions'->'entry' @> %(values_query)s
+            OR data->'descriptions'->'items' @> %(set_value_query)s
+            OR data->'descriptions'->'items' @> %(set_values_query)s
             """
         keys = {'value_query': value_query,
                 'values_query': values_query,
                 'set_value_query': '[%s]' % value_query,
                 'set_values_query': '[%s]' % values_query}
-        return self._do_find(sql, keys, limit, offset)
+        return self._do_find(where, keys, limit, offset)
 
     def find_by_query(self, p, q, limit=None, offset=None):
         # NOTE: ILIKE is *really* slow, if we keep this, index expected property queries
-        sql = """
-            SELECT id, data, manifest, created, modified FROM {tname}
-            WHERE data->'descriptions'->'entry'->>%(p)s ILIKE %(q)s
-            LIMIT {limit} OFFSET {offset}
+        where = """
+            data->'descriptions'->'entry'->>%(p)s ILIKE %(q)s
             """
         keys = {'p': p, 'q': '%'+ q +'%'}
-        return self._do_find(sql, keys, limit, offset)
+        return self._do_find(where, keys, limit, offset)
 
-    def _do_find(self, sql, keys, limit, offset):
-        limit, offset = self._limit_offset(limit, offset)
-        sql = sql.format(tname=self.tname, limit=limit, offset=offset)
+    def _do_find(self, where, keys, limit, offset):
+        limit = self.get_real_limit(limit)
+        offset = offset or 0
+        sql = """
+            SELECT id, data, manifest, created, modified FROM {tname}
+            WHERE {where}
+            ORDER BY id
+            LIMIT {limit} OFFSET {offset}
+        """.format(tname=self.tname, where=where, limit=limit, offset=offset)
         cursor = self.connection.cursor()
         try:
             cursor.execute(sql, keys)
@@ -129,10 +127,8 @@ class Storage:
             self.connection.commit()
         return result
 
-    def _limit_offset(self, limit, offset):
-        limit = limit if limit is not None and limit < MAX_LIMIT else DEFAULT_LIMIT
-        offset = offset if offset is not None else 0
-        return limit, offset
+    def get_real_limit(self, limit):
+        return DEFAULT_LIMIT if limit is None or limit > MAX_LIMIT else limit
 
     def get_all_versions(self, identifier):
         cursor = self.connection.cursor()
