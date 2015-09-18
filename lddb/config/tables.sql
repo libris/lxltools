@@ -14,5 +14,5 @@ CREATE TABLE IF NOT EXISTS lddb__versions (
     data jsonb not null,
     manifest jsonb not null,
     modified timestamp with time zone not null default now(),
-    unique (id, checksum)
+    unique (id, checksum, modified)
     );
