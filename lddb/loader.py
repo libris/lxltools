@@ -48,8 +48,12 @@ if __name__ == '__main__':
     argp.add_argument('-H', '--host')
     argp.add_argument('-u', '--user')
     argp.add_argument('-p', '--password')
+    argp.add_argument('--setup', action='store_true', help="Create tables and indexes")
     argp.add_argument('datasets', metavar='DATASET', nargs='*')
     args = argp.parse_args()
 
     storage = Storage('lddb', args.db_name, args.host, args.user, args.password)
+    if args.setup:
+        storage.setup('tables')
+        storage.setup('indexes')
     load_datasets(storage, args.datasets)

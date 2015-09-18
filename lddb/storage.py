@@ -2,6 +2,7 @@
 from __future__ import unicode_literals
 
 import logging
+from os import path as P
 from datetime import datetime
 import hashlib
 import json
@@ -25,6 +26,14 @@ class Storage:
         self.tname = base_table
         self.vtname = "{0}__versions".format(base_table)
         self.versioning = True
+
+    def setup(self, name):
+        pkg_dir = P.dirname(__file__)
+        with open(P.join(pkg_dir, 'config', '%s.sql' % name)) as fp:
+            create_db_sql = fp.read()
+        cursor = self.connection.cursor()
+        cursor.execute(create_db_sql)
+        self.connection.commit()
 
 
     # Load-methods
