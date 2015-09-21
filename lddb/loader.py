@@ -1,4 +1,5 @@
 import os
+import sys
 import json
 import logging
 from .storage import Storage
@@ -51,6 +52,10 @@ if __name__ == '__main__':
     argp.add_argument('--setup', action='store_true', help="Create tables and indexes")
     argp.add_argument('datasets', metavar='DATASET', nargs='*')
     args = argp.parse_args()
+
+    if not args.db_name:
+        argp.print_usage()
+        sys.exit(2)
 
     storage = Storage('lddb', args.db_name, args.host, args.user, args.password)
     if args.setup:
