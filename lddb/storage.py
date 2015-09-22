@@ -111,6 +111,16 @@ class Storage:
                 'set_values_query': '[%s]' % values_query}
         return self._do_find(where, keys, limit, offset)
 
+    def find_by_example(self, example, limit=None, offset=None):
+        value_query = json.dumps(example, ensure_ascii=False, sort_keys=True)
+        where = """
+            data->'descriptions'->'entry' @> %(value_query)s
+            OR data->'descriptions'->'items' @> %(set_value_query)s
+            """
+        keys = {'value_query': value_query,
+                'set_value_query': '[%s]' % value_query}
+        return self._do_find(where, keys, limit, offset)
+
     def find_by_query(self, p, q, limit=None, offset=None):
         # NOTE: ILIKE is *really* slow, if we keep this, index expected property queries
         where = """
