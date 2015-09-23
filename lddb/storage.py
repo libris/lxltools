@@ -146,6 +146,19 @@ class Storage:
             self.connection.commit()
         return result
 
+    def get_type_count(self):
+        cursor = self.connection.cursor()
+        cursor.execute("""
+            SELECT data->'descriptions'->'entry'->>'@type' AS type, count(*)
+            FROM {tname}
+            GROUP BY type
+            ORDER BY count DESC;
+        """.format(tname=self.tname))
+        #SELECT count(item), item->>'@type' AS type from {tname} AS rec,
+        #jsonb_array_elements(rec.data->'descriptions'->'items') AS item
+        #GROUP BY type;
+        return list(cursor)
+
     def get_real_limit(self, limit):
         return DEFAULT_LIMIT if limit is None or limit > MAX_LIMIT else limit
 
