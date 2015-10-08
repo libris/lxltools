@@ -151,8 +151,7 @@ class Storage:
         cursor.execute("""
             SELECT data->'descriptions'->'entry'->>'@type' AS type, count(*)
             FROM {tname}
-            GROUP BY type
-            ORDER BY count DESC;
+            GROUP BY type;
         """.format(tname=self.tname))
         #SELECT count(item), item->>'@type' AS type from {tname} AS rec,
         #jsonb_array_elements(rec.data->'descriptions'->'items') AS item
