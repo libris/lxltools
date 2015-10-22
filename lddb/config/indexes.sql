@@ -1,10 +1,10 @@
 CREATE INDEX idx_lddb_alive ON lddb (id) WHERE deleted IS NOT true;
 CREATE INDEX idx_lddb_modified ON lddb (modified);
 CREATE INDEX idx_lddb_manifest ON lddb USING GIN (manifest jsonb_path_ops);
+CREATE INDEX idx_lddb_quoted ON lddb USING GIN (quoted jsonb_path_ops);
 CREATE INDEX idx_lddb_entry ON lddb USING GIN ((data->'descriptions'->'entry') jsonb_path_ops);
 CREATE INDEX idx_lddb_entry_type ON lddb ((data->'descriptions'->'entry'->>'@type'));
 CREATE INDEX idx_lddb_items ON lddb USING GIN ((data->'descriptions'->'items') jsonb_path_ops);
-CREATE INDEX idx_lddb_quoted ON lddb USING GIN ((data->'descriptions'->'quoted') jsonb_path_ops);
 CREATE INDEX idx_lddb_dataset ON lddb USING GIN ((manifest->'dataset') jsonb_path_ops);
 
 CREATE INDEX idx_lddb__versions_id ON lddb__versions (id);
