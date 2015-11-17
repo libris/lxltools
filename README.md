@@ -8,6 +8,7 @@ LIBRISXL Linked Data Database
 On Mac, use homebrew to install. Make sure you have at least version 9.4.
 
     $ brew install postgresql
+    $ postgres -D /usr/local/var/postgres
 
 2. Create a user (optional)
 
@@ -19,7 +20,7 @@ On Mac, use homebrew to install. Make sure you have at least version 9.4.
 
 4. Create tables
 
-    $ psql -U \<username\> \<databasename\> < config/lddb.sql
+    $ psql -U \<username\> \<databasename\> < config/tables.sql
 
 If you didn't create a user in step 2, you can ignore the "-U \<username\> part".
 
