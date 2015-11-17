@@ -56,3 +56,17 @@ docs/_build/
 # PyBuilder
 target/
 config.cfg
+
+.idea/.name
+
+*.iml
+
+.idea/misc.xml
+
+.idea/modules.xml
+
+.idea/vcs.xml
+
+.idea/workspace.xml
+
+.idea/dictionaries/ina.xml
