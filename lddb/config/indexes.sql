@@ -6,7 +6,7 @@ CREATE INDEX idx_lddb_entry ON lddb USING GIN ((data->'descriptions'->'entry') j
 CREATE INDEX idx_lddb_entry_type ON lddb ((data->'descriptions'->'entry'->>'@type'));
 CREATE INDEX idx_lddb_items ON lddb USING GIN ((data->'descriptions'->'items') jsonb_path_ops);
 CREATE INDEX idx_lddb_dataset ON lddb ((manifest->>'dataset'));
-CREATE INDEX idx_lddb_alt_ids ON lddb USING GIN ((manifest->'alternateIdentifiers') jsonb_path_ops);
+CREATE INDEX idx_lddb_ids ON lddb USING GIN ((manifest->'identifiers') jsonb_path_ops);
 
 CREATE INDEX idx_lddb__versions_id ON lddb__versions (id);
 CREATE INDEX idx_lddb__versions_modified ON lddb__versions (modified);
