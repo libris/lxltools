@@ -40,6 +40,10 @@ class Storage:
     # Load-methods
 
     def get_record(self, identifier):# -> Record
+        # TODO: remove this id hack and select on manifest identifiers instead
+        # (and let app layer redirect to canonical form)
+        if identifier[0] == '/':
+            identifier = identifier[1:]
         cursor = self.connection.cursor()
         cursor.execute("""
                 SELECT id, data, manifest, created, modified FROM {0}
@@ -60,11 +64,12 @@ class Storage:
         ids_query = '[%s]' % id_query
         sql = """
             SELECT id FROM {0}
-            WHERE data->'descriptions'->'items' @> %(ids_query)s
+            WHERE manifest->'identifiers' @> %(identifier)s
+                OR data->'descriptions'->'items' @> %(ids_query)s
                 OR data->'descriptions'->'entry' @> %(id_query)s
             """.format(self.tname)
         cursor.execute(sql, {
-                'identifier': identifier,
+                'identifier': '"%s"' % identifier,
                 'ids_query': ids_query,
                 'id_query': id_query})
         for rec_id, in cursor:
@@ -90,8 +95,8 @@ class Storage:
         Find records that reference the given identifier by quotation.
         """
         where = """
-            data->'descriptions'->'quoted' @> %(ref_query)s
-            OR data->'descriptions'->'quoted' @> %(sameas_query)s
+            quoted @> %(ref_query)s
+            OR quoted @> %(sameas_query)s
             """
         keys = {'ref_query': '[{"@graph": {"@id": "%s"}}]' % identifier,
                 'sameas_query': '[{"@graph": {"sameAs": [{"@id": "%s"}]}}]' % identifier}
