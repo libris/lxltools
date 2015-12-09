@@ -20,8 +20,9 @@ DEFAULT_LIMIT = 200
 
 class Storage:
 
-    def __init__(self, base_table, database, host, user, password):
-        self.connection = psycopg2.connect(database=database, host=host,
+    def __init__(self, base_table='lddb', database=None, host=None, user=None, password=None,
+            connection=None):
+        self.connection = connection or psycopg2.connect(database=database, host=host,
                 user=user, password=password)
         self.tname = base_table
         self.vtname = "{0}__versions".format(base_table)
