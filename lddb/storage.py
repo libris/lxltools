@@ -265,16 +265,14 @@ class Storage:
             cursor = self.connection.cursor()
             (identifier, data, manifest) = self._store(cursor, identifier, data, manifest)
             self.connection.commit()
-
             # Load results from insert
-            status = self.get_record_status(identifier)
-            data['created'] = status['created']
-            data['modified'] = status['modified']
+            #status = self.get_record_status(identifier)
+            #data['created'] = status['created']
+            #data['modified'] = status['modified']
         except Exception as e:
             logger.error("Store failed. Rolling back.", exc_info=True)
             self.connection.rollback()
             raise
-
         return data
 
     def bulk_store(self, items):
