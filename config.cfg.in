@@ -1,8 +1,0 @@
-SECRET_KEY='SECRET'
-BIND_HOST='<host>'
-BIND_PORT=<port>
-DEBUG=True
-DBHOST='<host>'
-DBNAME='<schema>'
-DBUSER='<username>'
-DBPASSWORD='<password>'
