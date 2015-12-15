@@ -42,8 +42,9 @@ class Storage:
     def get_record(self, identifier):# -> Record
         # TODO: remove this id hack and select on manifest identifiers instead
         # (and let app layer redirect to canonical form)
-        if identifier[0] == '/':
-            identifier = identifier[1:]
+        if '://' in identifier:
+            import urlparse
+            identifier = urlparse.urlparse(identifier).path[1:]
         cursor = self.connection.cursor()
         cursor.execute("""
                 SELECT id, data, manifest, created, modified FROM {0}
@@ -60,6 +61,12 @@ class Storage:
         Get the record ids containing a description of the given identifier.
         """
         cursor = self.connection.cursor()
+
+        # TODO: remove this too (see get_record hack above)
+        if '://' in identifier:
+            import urlparse
+            identifier = urlparse.urlparse(identifier).path
+
         id_query = '{"@id": "%s"}' % identifier
         ids_query = '[%s]' % id_query
         sql = """
