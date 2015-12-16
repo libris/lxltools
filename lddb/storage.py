@@ -40,18 +40,18 @@ class Storage:
     # Load-methods
 
     def get_record(self, identifier):# -> Record
-        # TODO: remove this id hack and select on manifest identifiers instead
-        # (and let app layer redirect to canonical form)
-        if '://' in identifier:
-            import urlparse
-            identifier = urlparse.urlparse(identifier).path[1:]
+        import urlparse
+        slug = urlparse.urlparse(identifier).path[1:]
+        sql = """
+            SELECT id, data, manifest, created, modified FROM {0}
+            WHERE id = %(slug)s
+                OR manifest->'identifiers' @> %(identifier)s
+            """.format(self.tname)
         cursor = self.connection.cursor()
-        cursor.execute("""
-                SELECT id, data, manifest, created, modified FROM {0}
-                WHERE id = '{1}'
-                """.format(self.tname, identifier))
+        cursor.execute(sql, {
+                'slug': '"%s"' % slug,
+                'identifier': '"%s"' % identifier})
         result = cursor.fetchone()
-        self.connection.commit()
         if result:
             return self._inject_storage_data(result)
         return None
@@ -60,13 +60,6 @@ class Storage:
         """
         Get the record ids containing a description of the given identifier.
         """
-        cursor = self.connection.cursor()
-
-        # TODO: remove this too (see get_record hack above)
-        if '://' in identifier:
-            import urlparse
-            identifier = urlparse.urlparse(identifier).path
-
         id_query = '{"@id": "%s"}' % identifier
         ids_query = '[%s]' % id_query
         sql = """
@@ -75,6 +68,7 @@ class Storage:
                 OR data->'descriptions'->'items' @> %(ids_query)s
                 OR data->'descriptions'->'entry' @> %(id_query)s
             """.format(self.tname)
+        cursor = self.connection.cursor()
         cursor.execute(sql, {
                 'identifier': '"%s"' % identifier,
                 'ids_query': ids_query,
