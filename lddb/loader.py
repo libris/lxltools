@@ -34,9 +34,16 @@ def get_documents(source):
             yield json.load(f)
 
 def get_doc_id(doc):
-    if 'descriptions' not in doc:
-        return None
-    return doc['descriptions']['entry'][ID]
+    if 'descriptions' in doc:
+        return doc['descriptions']['entry'][ID]
+    elif GRAPH in doc:
+        graph = doc[GRAPH]
+        if isinstance(graph, list):
+            return graph[0][ID]
+        else:
+            return graph[ID]
+    else:
+        return doc[ID]
 
 
 if __name__ == '__main__':
