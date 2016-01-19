@@ -65,14 +65,12 @@ class Storage:
         sql = """
             SELECT id FROM {0}
             WHERE manifest->'identifiers' @> %(identifier)s
-                OR data->'descriptions'->'items' @> %(ids_query)s
-                OR data->'descriptions'->'entry' @> %(id_query)s
+                OR data->'@graph' @> %(ids_query)s
             """.format(self.tname)
         cursor = self.connection.cursor()
         cursor.execute(sql, {
                 'identifier': '"%s"' % identifier,
-                'ids_query': ids_query,
-                'id_query': id_query})
+                'ids_query': ids_query})
         for rec_id, in cursor:
             yield rec_id
 
@@ -80,14 +78,10 @@ class Storage:
         ref_query = '{"%s": {"@id": "%s"}}' % (rel, ref)
         refs_query = '{"%s": [{"@id": "%s"}]}' % (rel, ref)
         where = """
-            data->'descriptions'->'entry' @> %(ref_query)s
-            OR data->'descriptions'->'entry' @> %(refs_query)s
-            OR data->'descriptions'->'items' @> %(set_ref_query)s
-            OR data->'descriptions'->'items' @> %(set_refs_query)s
+            data->'@graph' @> %(set_ref_query)s
+            OR data->'@graph' @> %(set_refs_query)s
             """
-        keys = {'ref_query': ref_query,
-                'refs_query': refs_query,
-                'set_ref_query': '[%s]' % ref_query,
+        keys = {'set_ref_query': '[%s]' % ref_query,
                 'set_refs_query': '[%s]' % refs_query}
         return self._do_find(where, keys, limit, offset)
 
@@ -107,25 +101,19 @@ class Storage:
         value_query = '{"%s": "%s"}' % (p, value)
         values_query = '{"%s": ["%s"]}' % (p, value)
         where = """
-            data->'descriptions'->'entry' @> %(value_query)s
-            OR data->'descriptions'->'entry' @> %(values_query)s
-            OR data->'descriptions'->'items' @> %(set_value_query)s
-            OR data->'descriptions'->'items' @> %(set_values_query)s
+            data->'@graph' @> %(set_value_query)s
+            OR data->'@graph' @> %(set_values_query)s
             """
-        keys = {'value_query': value_query,
-                'values_query': values_query,
-                'set_value_query': '[%s]' % value_query,
+        keys = {'set_value_query': '[%s]' % value_query,
                 'set_values_query': '[%s]' % values_query}
         return self._do_find(where, keys, limit, offset)
 
     def find_by_example(self, example, limit=None, offset=None):
         value_query = json.dumps(example, ensure_ascii=False, sort_keys=True)
         where = """
-            data->'descriptions'->'entry' @> %(value_query)s
-            OR data->'descriptions'->'items' @> %(set_value_query)s
+            data->'@graph' @> %(set_value_query)s
             """
-        keys = {'value_query': value_query,
-                'set_value_query': '[%s]' % value_query}
+        keys = {'set_value_query': '[%s]' % value_query}
         return self._do_find(where, keys, limit, offset)
 
     def find_by_query(self, p, q, limit=None, offset=None):
@@ -152,18 +140,6 @@ class Storage:
         finally:
             self.connection.commit()
         return result
-
-    def get_type_count(self):
-        cursor = self.connection.cursor()
-        cursor.execute("""
-            SELECT data->'descriptions'->'entry'->>'@type' AS type, count(*)
-            FROM {tname}
-            GROUP BY type;
-        """.format(tname=self.tname))
-        #SELECT count(item), item->>'@type' AS type from {tname} AS rec,
-        #jsonb_array_elements(rec.data->'descriptions'->'items') AS item
-        #GROUP BY type;
-        return list(cursor)
 
     def get_real_limit(self, limit):
         return DEFAULT_LIMIT if limit is None or limit > MAX_LIMIT else limit
@@ -192,9 +168,6 @@ class Storage:
         modified = modified.isoformat()
         manifest['created'] = created
         manifest['modified'] = modified
-        #entry = data['descriptions'].get('entry') or data
-        #entry['created'] = created
-        #entry['modified'] = modified
         return Record(identifier, data, manifest)
 
     def _assemble_result_list(self, results):
