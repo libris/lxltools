@@ -21,9 +21,11 @@ DEFAULT_LIMIT = 200
 class Storage:
 
     def __init__(self, base_table='lddb', database=None, host=None, user=None, password=None,
-            connection=None):
-        self.connection = connection or psycopg2.connect(database=database, host=host,
-                user=user, password=password)
+            get_connection=None):
+        self._connection = None
+        self.get_gonnection = get_connection or (
+                lambda: psycopg2.connect(database=database, host=host,
+                        user=user, password=password))
         self.tname = base_table
         self.vtname = "{0}__versions".format(base_table)
         self.versioning = True
@@ -36,6 +38,15 @@ class Storage:
         cursor.execute(create_db_sql)
         self.connection.commit()
 
+    @property
+    def connection(self):
+        if not self._connection or self._connection.closed:
+            self._connection = self.get_gonnection()
+        return self._connection
+
+    def disconnect(self):
+        if self._connection:
+            self._connection.close()
 
     # Load-methods
 
