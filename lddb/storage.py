@@ -14,10 +14,6 @@ import psycopg2
 logger = logging.getLogger(__name__)
 
 
-MAX_LIMIT = 4000
-DEFAULT_LIMIT = 200
-
-
 class Storage:
 
     def __init__(self, base_table='lddb', database=None, host=None, user=None, password=None,
@@ -136,7 +132,6 @@ class Storage:
         return self._do_find(where, keys, limit, offset)
 
     def _do_find(self, where, keys, limit, offset):
-        limit = self.get_real_limit(limit)
         offset = offset or 0
         sql = """
             SELECT id, data, manifest, created, modified FROM {tname}
@@ -151,9 +146,6 @@ class Storage:
         finally:
             self.connection.commit()
         return result
-
-    def get_real_limit(self, limit):
-        return DEFAULT_LIMIT if limit is None or limit > MAX_LIMIT else limit
 
     def get_all_versions(self, identifier):
         cursor = self.connection.cursor()
