@@ -1,27 +1,11 @@
-# lddb
-LIBRISXL Linked Data Database
+# LXLTools
 
-## Setting up a postgresql database
+## Tools for the LIBRIS-XL Infrastructure
 
-1. Install postgresql.
+A collection of tools for working with data, with focus on RDF.
 
-On Mac, use homebrew to install. Make sure you have at least version 9.4.
+Includes modules for:
 
-    $ brew install postgresql
-    $ postgres -D /usr/local/var/postgres
-
-2. Create a user (optional)
-
-    $ createuser -d -P \<username\> 
-
-3. Create a database
-
-    $ createdb -E UTF8  -O \<user from step 2 (if used)\> \<databasename\>
-
-4. Create tables
-
-    $ psql -U \<username\> \<databasename\> < config/tables.sql
-
-If you didn't create a user in step 2, you can ignore the "-U \<username\> part".
-
-
+* Importing and converting to RDF datasets.
+* Working with JSON-LD stored in Postgres and Elasticsearch.
+* Processing RDFS and OWL to generate JSON-LD contexts and related mappers.
