@@ -9,7 +9,7 @@ with open(P.join(P.dirname(__file__), 'requirements.txt')) as fp:
     requirements = [l.rstrip() for l in fp.readlines()]
 
 setup(
-    name = "LDDB",
+    name = "lxltools",
     version = lxltools.__version__,
     description = """LIBRISXL Linked Data Database""",
     long_description = """
