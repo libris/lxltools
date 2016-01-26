@@ -3,7 +3,7 @@ import sys
 import json
 import logging
 from .storage import Storage
-from .ld.keys import *
+from ..ld.keys import *
 
 
 logger = logging.getLogger(__name__)

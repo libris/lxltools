@@ -1,7 +1,7 @@
 from __future__ import unicode_literals
 from os import path as P
 import json
-from lddb import ld
+from lxltools import ld
 
 
 def test_flatten():

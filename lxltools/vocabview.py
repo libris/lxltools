@@ -5,8 +5,8 @@ __metaclass__ = type
 from rdflib import Graph, Literal, URIRef, Namespace, RDF, RDFS, OWL
 from rdflib.resource import Resource
 
-from lddb.ld.keys import ID, TYPE
-from . import as_iterable
+from .ld.keys import ID, TYPE
+from .util import as_iterable
 
 
 SDO = Namespace("http://schema.org/")

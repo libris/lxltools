@@ -4,9 +4,9 @@ __metaclass__ = type
 
 from collections import OrderedDict, namedtuple
 
-from . import as_iterable
-from lddb.ld.keys import *
-from lddb.ld.frame import autoframe
+from .util import as_iterable
+from .ld.keys import *
+from .ld.frame import autoframe
 
 
 MAX_LIMIT = 4000
