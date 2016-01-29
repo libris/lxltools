@@ -69,15 +69,19 @@ class Storage:
         """
         id_query = '{"@id": "%s"}' % identifier
         ids_query = '[%s]' % id_query
+        sameas_query = '[{"sameAs": %s}]' % ids_query
         sql = """
             SELECT id FROM {0}
             WHERE manifest->'identifiers' @> %(identifier)s
                 OR data->'@graph' @> %(ids_query)s
+                OR data->'@graph' @> %(sameas_query)s
             """.format(self.tname)
         cursor = self.connection.cursor()
         cursor.execute(sql, {
                 'identifier': '"%s"' % identifier,
-                'ids_query': ids_query})
+                'ids_query': ids_query,
+                'sameas_query': sameas_query
+                })
         for rec_id, in cursor:
             yield rec_id
 
