@@ -140,8 +140,8 @@ class DataView:
     def get_real_limit(self, limit):
         return DEFAULT_LIMIT if limit is None or limit > MAX_LIMIT else limit
 
-    def get_index_aggregate(self, base_uri, limit=50, stats_tree=None):
-        stats_tree = stats_tree or {'inScheme.@id': ['@type']}
+    def get_index_stats(self, base_uri, limit=50, stats_tree=None):
+        stats_tree = stats_tree or {'inScheme.@id': {'inCollection.@id': ['@type']}}
 
         def build_agg_query(tree, size=1000):
             query = {}
@@ -170,23 +170,47 @@ class DataView:
                 index=self.es_index)
 
         def lookup(item_id):
-            data = self.get_record_data(item_id)
-            return get_descriptions(data).entry if data else None
+            if item_id in self.vocab.index:
+                return self.vocab.index[item_id]
+            else:
+                data = self.get_record_data(item_id)
+                return get_descriptions(data).entry if data else None
 
-        for path, agg in results['aggregations'].items():
-            for bucket in agg['buckets']:
-                item_id = bucket['key']
-                bucket['resource'] = lookup(item_id)
-                for bucket2 in bucket['@type']['buckets']:
-                    bucket2['resource'] = self.vocab.index[bucket2['key']]
-                #for subkey in ['@type', 'inCollection.@id']:
-                #    if subkey not in bucket:
-                #        continue
-                #    for bucket2 in bucket[subkey]['buckets']:
-                #        key = bucket2['key']
-                #        bucket2['resource'] = self.vocab.index.get(key) or lookup(key)
+        def add_slices(stats, aggregations, base):
+            slice_map = {}
 
-        return {TYPE: 'WebSite', ID: base_uri, 'statistics': results}
+            for agg_key, agg in aggregations.items():
+                observations= []
+                slice_node = {
+                    'dimension': agg_key.replace('.'+ID, ''),
+                    'observation': observations
+                }
+                slice_map[agg_key] = slice_node
+
+                for bucket in agg['buckets']:
+                    item_id = bucket.pop('key')
+                    search_page_url = "{base}&{param}={value}".format(
+                            base=base,
+                            param=agg_key,
+                            value=url_quote(item_id))
+
+                    observation = {
+                        'count': bucket.pop('doc_count'),
+                        'page': {ID: search_page_url},
+                        'resource': lookup(item_id)
+                    }
+                    observations.append(observation)
+
+                    add_slices(observation, bucket, search_page_url)
+
+            if slice_map:
+                stats['sliceByDimension'] = slice_map
+
+        stats = {}
+        add_slices(stats, results['aggregations'],
+                base="/find?q=*&limit={}".format(limit))
+
+        return {TYPE: 'WebSite', ID: base_uri, 'statistics': stats}
 
     def find_ambiguity(self, request):
         kws = dict(request.args)
