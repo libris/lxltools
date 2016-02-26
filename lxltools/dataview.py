@@ -3,6 +3,7 @@ from __future__ import unicode_literals
 __metaclass__ = type
 
 from collections import OrderedDict, namedtuple
+from urllib import quote as url_quote
 
 from .util import as_iterable
 from .ld.keys import *
@@ -139,7 +140,19 @@ class DataView:
     def get_real_limit(self, limit):
         return DEFAULT_LIMIT if limit is None or limit > MAX_LIMIT else limit
 
-    def get_index_aggregate(self, base_uri):
+    def get_index_aggregate(self, base_uri, limit=50, stats_tree=None):
+        stats_tree = stats_tree or {'inScheme.@id': ['@type']}
+
+        def build_agg_query(tree, size=1000):
+            query = {}
+            for key in tree:
+                query[key] = {
+                    'terms': {'field': key, 'size': size}
+                }
+                if isinstance(tree, dict):
+                    query[key]['aggs'] = build_agg_query(tree[key], size)
+            return query
+
         dsl = {
             "size": 0,
             "query" : {
@@ -150,29 +163,9 @@ class DataView:
                     ]
                 }
             },
-            "aggs": {
-                "inScheme.@id": {
-                    "terms": {
-                        "field": "inScheme.@id",
-                        #"size": 1000
-                    },
-                    "aggs": {
-                        #"inCollection.@id": {
-                        #    "terms": {
-                        #        "field": "inCollection.@id",
-                        #        #"size": 1000
-                        #    }
-                        #},
-                        "@type": {
-                            "terms": {
-                                "field": "@type",
-                                #"size": 1000
-                            }
-                        }
-                    }
-                }
-            }
+            "aggs": build_agg_query(stats_tree)
         }
+
         results = self.elastic.search(body=dsl, size=dsl['size'],
                 index=self.es_index)
 
