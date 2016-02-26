@@ -2,15 +2,15 @@
 # -*- coding: UTF-8 -*-
 from os import path as P
 from setuptools import setup
-import lddb
+import lxltools
 
 
 with open(P.join(P.dirname(__file__), 'requirements.txt')) as fp:
     requirements = [l.rstrip() for l in fp.readlines()]
 
 setup(
-    name = "LDDB",
-    version = lddb.__version__,
+    name = "lxltools",
+    version = lxltools.__version__,
     description = """LIBRISXL Linked Data Database""",
     long_description = """
     %s""" % "".join(open("README.md")),
@@ -25,7 +25,7 @@ setup(
         ],
     keywords = "linkeddata database json rdf",
     platforms = ["any"],
-    packages = ["lddb"],
+    packages = ["lxltools"],
     include_package_data = True,
     install_requires = requirements,
     test_suite = 'nose.collector'
