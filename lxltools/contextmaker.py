@@ -8,7 +8,7 @@ Resource.id = Resource.identifier
 SUFFIX_FORMAT_MAP['jsonld'] = 'json-ld'
 
 
-DEFAULT_NS_PREF_ORDER = 'dc sdo mads skos prov bf bibo foaf dctype void owl rdfs rdf xsd edtf'.split()
+DEFAULT_NS_PREF_ORDER = 'dc sdo madsrdf skos prov bf bibo foaf dctype void owl rdfs rdf xsd edtf'.split()
 
 CLASS_TYPES = {RDFS.Class, OWL.Class, RDFS.Datatype}
 PROP_TYPES = {RDF.Property, OWL.ObjectProperty, OWL.DatatypeProperty}
@@ -146,7 +146,13 @@ def add_overlay(context, overlay):
                 continue
             if isinstance(v, basestring):
                 v = defs[term] = {'@id': v}
-            v.update(dfn)
+            if isinstance(dfn, dict):
+                v.update(kv for kv in dfn.items() if kv[0] != '@id')
+            else:
+                assert isinstance(dfn, unicode)
+                # TODO: assert v['@id'] == compacted(dfn) and skip check below
+                if '/' not in dfn:
+                    v['@id'] = dfn
         else:
             defs[term] = dfn
 
