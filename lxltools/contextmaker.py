@@ -146,7 +146,13 @@ def add_overlay(context, overlay):
                 continue
             if isinstance(v, basestring):
                 v = defs[term] = {'@id': v}
-            v.update(dfn)
+            if isinstance(dfn, dict):
+                v.update(kv for kv in dfn.items() if kv[0] != '@id')
+            else:
+                assert isinstance(dfn, unicode)
+                # TODO: assert v['@id'] == compacted(dfn) and skip check below
+                if '/' not in dfn:
+                    v['@id'] = dfn
         else:
             defs[term] = dfn
 
