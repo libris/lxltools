@@ -140,8 +140,8 @@ class DataView:
     def get_real_limit(self, limit):
         return DEFAULT_LIMIT if limit is None or limit > MAX_LIMIT else limit
 
-    def get_index_stats(self, base_uri, limit=50, stats_tree=None):
-        stats_tree = stats_tree or {'inScheme.@id': {'inCollection.@id': ['@type']}}
+    def get_index_stats(self, base_uri, limit=50, slicetree=None):
+        slicetree = slicetree or {'inScheme.@id': {'inCollection.@id': ['@type']}}
 
         def build_agg_query(tree, size=1000):
             query = {}
@@ -163,18 +163,11 @@ class DataView:
                     ]
                 }
             },
-            "aggs": build_agg_query(stats_tree)
+            "aggs": build_agg_query(slicetree)
         }
 
         results = self.elastic.search(body=dsl, size=dsl['size'],
                 index=self.es_index)
-
-        def lookup(item_id):
-            if item_id in self.vocab.index:
-                return self.vocab.index[item_id]
-            else:
-                data = self.get_record_data(item_id)
-                return get_descriptions(data).entry if data else None
 
         def add_slices(stats, aggregations, base):
             slice_map = {}
@@ -196,7 +189,7 @@ class DataView:
                     observation = {
                         'totalItems': bucket.pop('doc_count'),
                         'view': {ID: search_page_url},
-                        'object': lookup(item_id)
+                        'object': self.lookup(item_id)
                     }
                     observations.append(observation)
 
@@ -212,9 +205,18 @@ class DataView:
         add_slices(stats, results['aggregations'],
                 base="/find?q=*&limit={}".format(limit))
 
-        return {TYPE: 'WebSite', ID: base_uri, 'statistics': stats}
+        return {TYPE: 'DataCatalog', ID: base_uri, 'statistics': stats}
 
     get_index_aggregate = get_index_stats # TODO: deprecated; remove
+
+    def lookup(self, item_id):
+        if item_id in self.vocab.index:
+            return self.vocab.index[item_id]
+        else:
+            data = self.get_record_data(item_id)
+            if data:
+                return get_descriptions(data).entry if data else None
+        return {ID: item_id, 'label': item_id}
 
     def find_ambiguity(self, request):
         kws = dict(request.args)
