@@ -214,6 +214,8 @@ class DataView:
 
         return {TYPE: 'WebSite', ID: base_uri, 'statistics': stats}
 
+    get_index_aggregate = get_index_stats # TODO: deprecated; remove
+
     def find_ambiguity(self, request):
         kws = dict(request.args)
         rtype = kws.pop('type', None)
