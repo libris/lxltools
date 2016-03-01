@@ -105,24 +105,24 @@ class DataView:
 
         def ref(link): return {ID: link}
 
-        results = OrderedDict({'@type': 'PagedCollection'})
+        results = OrderedDict({'@type': 'PartialCollectionView'})
         results['@id'] = make_find_url(offset=offset, **page_params)
-        results['itemsPerPage'] = limit
+        #results['itemsPerPage'] = limit
         #if total is not None:
         results['itemOffset'] = offset
         results['totalItems'] = total
-        results['firstPage'] = ref(make_find_url(**page_params))
-        results['query'] = q
+        results['first'] = ref(make_find_url(**page_params))
+        results['textQuery'] = q
         results['value'] = value
         #'lastPage' ...
         if offset:
             prev_offset = offset - limit
             if prev_offset <= 0:
                 prev_offset = None
-            results['previousPage'] = ref(make_find_url(offset=prev_offset, **page_params))
+            results['previous'] = ref(make_find_url(offset=prev_offset, **page_params))
         if len(items) == limit:
             next_offset = offset + limit if offset else limit
-            results['nextPage'] = ref(make_find_url(offset=next_offset, **page_params))
+            results['next'] = ref(make_find_url(offset=next_offset, **page_params))
         # hydra:member
         results['items'] = items
 
@@ -185,7 +185,6 @@ class DataView:
                     'dimension': agg_key.replace('.'+ID, ''),
                     'observation': observations
                 }
-                slice_map[agg_key] = slice_node
 
                 for bucket in agg['buckets']:
                     item_id = bucket.pop('key')
@@ -195,13 +194,16 @@ class DataView:
                             value=url_quote(item_id))
 
                     observation = {
-                        'count': bucket.pop('doc_count'),
-                        'page': {ID: search_page_url},
-                        'resource': lookup(item_id)
+                        'totalItems': bucket.pop('doc_count'),
+                        'view': {ID: search_page_url},
+                        'object': lookup(item_id)
                     }
                     observations.append(observation)
 
                     add_slices(observation, bucket, search_page_url)
+
+                if observations:
+                    slice_map[agg_key] = slice_node
 
             if slice_map:
                 stats['sliceByDimension'] = slice_map
