@@ -111,18 +111,25 @@ class DataView:
         #if total is not None:
         results['itemOffset'] = offset
         results['totalItems'] = total
-        results['first'] = ref(make_find_url(**page_params))
         results['textQuery'] = q
         results['value'] = value
-        #'lastPage' ...
+
+        results['first'] = ref(make_find_url(**page_params))
+
+        last_offset = total - limit
+        if last_offset > 0:
+            results['last'] = ref(make_find_url(offset=last_offset, **page_params))
+
         if offset:
             prev_offset = offset - limit
             if prev_offset <= 0:
                 prev_offset = None
             results['previous'] = ref(make_find_url(offset=prev_offset, **page_params))
-        if len(items) == limit:
+
+        if len(items) == limit and offset + limit < total:
             next_offset = offset + limit if offset else limit
             results['next'] = ref(make_find_url(offset=next_offset, **page_params))
+
         # hydra:member
         results['items'] = items
 
