@@ -116,9 +116,11 @@ class DataView:
 
         results['first'] = ref(make_find_url(**page_params))
 
-        last_offset = total - limit
-        if last_offset > 0:
-            results['last'] = ref(make_find_url(offset=last_offset, **page_params))
+        if offset + limit > total:
+            last_offset = offset
+        else:
+            last_offset = total - (total % limit)
+        results['last'] = ref(make_find_url(offset=last_offset, **page_params))
 
         if offset:
             prev_offset = offset - limit
