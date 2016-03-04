@@ -1,8 +1,9 @@
 # -*- coding: UTF-8 -*-
-from __future__ import unicode_literals
+from __future__ import unicode_literals, print_function
 __metaclass__ = type
 
 from collections import OrderedDict, namedtuple
+import re
 from urllib import quote as url_quote
 
 from .util import as_iterable
@@ -102,7 +103,6 @@ class DataView:
             chip = self.to_chip(self.get_decorated_data(rec.data, include_quoted=False))
             items.append(chip)
 
-
         def ref(link): return {ID: link}
 
         results = OrderedDict({'@type': 'PartialCollectionView'})
@@ -116,21 +116,18 @@ class DataView:
 
         results['first'] = ref(make_find_url(**page_params))
 
-        if offset + limit > total:
-            last_offset = offset
-        else:
-            last_offset = total - (total % limit)
-        results['last'] = ref(make_find_url(offset=last_offset, **page_params))
+        offsets = compute_offsets(total, limit, offset)
 
-        if offset:
-            prev_offset = offset - limit
-            if prev_offset <= 0:
-                prev_offset = None
-            results['previous'] = ref(make_find_url(offset=prev_offset, **page_params))
+        results['last'] = ref(make_find_url(offset=offsets.last, **page_params))
 
-        if len(items) == limit and offset + limit < total:
-            next_offset = offset + limit if offset else limit
-            results['next'] = ref(make_find_url(offset=next_offset, **page_params))
+        if offsets.prev is not None:
+            if offsets.prev == 0:
+                results['previous'] = results['first']
+            else:
+                results['previous'] = ref(make_find_url(offset=offsets.prev, **page_params))
+
+        if offsets.next is not None:
+            results['next'] = ref(make_find_url(offset=offsets.next, **page_params))
 
         # hydra:member
         results['items'] = items
@@ -396,9 +393,44 @@ def has_ref(vs, *refs):
 
 def _tokenize(stuff):
     """
-    >>> print(_tokenize("One, Any (1911-)"))
+    >>> print(" ".join(_tokenize("One, Any (1911-)")))
     1911 any one
     """
     return sorted(set(
         re.sub(r'\W(?u)', '', part.lower(), flags=re.UNICODE)
         for part in stuff.split(" ")))
+
+
+Offsets = namedtuple('Offsets', 'prev, next, last')
+
+def compute_offsets(total, limit, offset):
+    """
+    >>> compute_offsets(total=52, limit=20, offset=0)
+    Offsets(prev=None, next=20, last=40)
+
+    >>> compute_offsets(total=52, limit=20, offset=20)
+    Offsets(prev=0, next=40, last=40)
+
+    >>> compute_offsets(total=52, limit=20, offset=40)
+    Offsets(prev=20, next=None, last=40)
+
+    >>> compute_offsets(total=50, limit=10, offset=40)
+    Offsets(prev=30, next=None, last=40)
+    """
+
+    o_prev = offset - limit
+    if o_prev < 0:
+        o_prev = None
+
+    o_next = offset + limit
+    if o_next >= total:
+        o_next = None
+    elif not offset:
+        o_next = limit
+
+    if (offset + limit) >= total:
+        o_last = offset
+    else:
+        o_last = total - (total % limit)
+
+    return Offsets(o_prev, o_next, o_last)
