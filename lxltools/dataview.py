@@ -149,16 +149,6 @@ class DataView:
     def get_index_stats(self, base_uri, limit=50, slicetree=None):
         slicetree = slicetree or {'inScheme.@id': {'inCollection.@id': ['@type']}}
 
-        def build_agg_query(tree, size=1000):
-            query = {}
-            for key in tree:
-                query[key] = {
-                    'terms': {'field': key, 'size': size}
-                }
-                if isinstance(tree, dict):
-                    query[key]['aggs'] = build_agg_query(tree[key], size)
-            return query
-
         dsl = {
             "size": 0,
             "query" : {
@@ -169,12 +159,26 @@ class DataView:
                     ]
                 }
             },
-            "aggs": build_agg_query(slicetree)
+            "aggs": self.build_agg_query(slicetree)
         }
 
         results = self.elastic.search(body=dsl, size=dsl['size'],
                 index=self.es_index)
+        stats = self.build_stats(results, limit)
 
+        return {TYPE: 'DataCatalog', ID: base_uri, 'statistics': stats}
+
+    def build_agg_query(self, tree, size=1000):
+        query = {}
+        for key in tree:
+            query[key] = {
+                'terms': {'field': key, 'size': size}
+            }
+            if isinstance(tree, dict):
+                query[key]['aggs'] = self.build_agg_query(tree[key], size)
+        return query
+
+    def build_stats(self, results, limit):
         def add_slices(stats, aggregations, base):
             slice_map = {}
 
@@ -211,9 +215,7 @@ class DataView:
         add_slices(stats, results['aggregations'],
                 base="/find?q=*&limit={}".format(limit))
 
-        return {TYPE: 'DataCatalog', ID: base_uri, 'statistics': stats}
-
-    get_index_aggregate = get_index_stats # TODO: deprecated; remove
+        return stats
 
     def lookup(self, item_id):
         if item_id in self.vocab.index:
