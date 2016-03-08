@@ -106,7 +106,7 @@ class DataView:
             items = [self.to_chip(r.get('_source')) for r in
                      hits.get('hits')]
             if statstree:
-                stats = self.build_stats(es_results, limit)
+                stats = self.build_stats(es_results, limit, q)
 
         for rec in records:
             chip = self.to_chip(self.get_decorated_data(rec.data, include_quoted=False))
@@ -190,7 +190,7 @@ class DataView:
                 query[key]['aggs'] = self.build_agg_query(tree[key], size)
         return query
 
-    def build_stats(self, results, limit):
+    def build_stats(self, results, limit, q='*'):
         def add_slices(stats, aggregations, base):
             slice_map = {}
 
@@ -225,7 +225,7 @@ class DataView:
 
         stats = {}
         add_slices(stats, results['aggregations'],
-                base="/find?q=*&limit={}".format(limit))
+                base="/find?q={}&limit={}".format(q, limit))
 
         return stats
 
