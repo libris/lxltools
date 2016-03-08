@@ -55,6 +55,7 @@ class DataView:
         total = None
         records = []
         items = []
+        stats = None
         page_params = {'p': p, 'o': o, 'value': value, 'q': q, 'limit': limit}
 
         # TODO: unify find_by_relation and find_by_example, support the latter form here too
@@ -92,12 +93,20 @@ class DataView:
                     }
                 }
             }
+
+            statstree = {'@type': []}
+            if statstree:
+                dsl["aggs"] = self.build_agg_query(statstree)
+
             # TODO: only ask ES for chip properties instead of post-processing
-            results = self.elastic.search(body=dsl, size=limit, from_=offset,
-                             index=self.es_index).get('hits')
-            total = results.get('total')
+            es_results = self.elastic.search(body=dsl, size=limit, from_=offset,
+                             index=self.es_index)
+            hits = es_results.get('hits')
+            total = hits.get('total')
             items = [self.to_chip(r.get('_source')) for r in
-                     results.get('hits')]
+                     hits.get('hits')]
+            if statstree:
+                stats = self.build_stats(es_results, limit)
 
         for rec in records:
             chip = self.to_chip(self.get_decorated_data(rec.data, include_quoted=False))
@@ -131,6 +140,9 @@ class DataView:
 
         # hydra:member
         results['items'] = items
+
+        if stats:
+            results['stats'] = stats
 
         return results
 
