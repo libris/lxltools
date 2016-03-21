@@ -159,7 +159,7 @@ class DataView:
         return DEFAULT_LIMIT if limit is None or limit > MAX_LIMIT else limit
 
     def get_index_stats(self, base_uri, limit=50, slicetree=None):
-        slicetree = slicetree or {'inScheme.@id': {'inCollection.@id': ['@type']}}
+        slicetree = slicetree or {'@type':[]}
 
         dsl = {
             "size": 0,
