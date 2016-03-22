@@ -62,12 +62,14 @@ class AutoFrame(object):
             return [self.to_embedded(lo, embed_chain, reembed) for lo in o]
         if isinstance(o, dict):
             o_id = o.get(self.id_key)
-            if o_id and o_id not in embed_chain and (
+            if not o_id:
+                obj = o
+            elif o_id not in embed_chain and (
                     reembed or o_id not in self.embedded):
                 obj = self.itemmap.get(o_id)
-                if obj:
-                    self.embed(o_id, obj, set(embed_chain), reembed)
-                    return obj
+            if obj:
+                self.embed(o_id, obj, set(embed_chain), reembed)
+                return obj
         return o
 
 
