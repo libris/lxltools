@@ -61,6 +61,7 @@ class AutoFrame(object):
         if isinstance(o, list):
             return [self.to_embedded(lo, embed_chain, reembed) for lo in o]
         if isinstance(o, dict):
+            obj = None
             o_id = o.get(self.id_key)
             if not o_id:
                 obj = o
