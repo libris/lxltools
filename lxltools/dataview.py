@@ -1,8 +1,10 @@
 # -*- coding: UTF-8 -*-
-from __future__ import unicode_literals
+from __future__ import unicode_literals, print_function
 __metaclass__ = type
 
 from collections import OrderedDict, namedtuple
+import re
+from urllib import quote as url_quote
 
 from .util import as_iterable
 from .ld.keys import *
@@ -53,6 +55,7 @@ class DataView:
         total = None
         records = []
         items = []
+        stats = None
         page_params = {'p': p, 'o': o, 'value': value, 'q': q, 'limit': limit}
 
         # TODO: unify find_by_relation and find_by_example, support the latter form here too
@@ -90,40 +93,56 @@ class DataView:
                     }
                 }
             }
+
+            statstree = {'@type': []}
+            if statstree:
+                dsl["aggs"] = self.build_agg_query(statstree)
+
             # TODO: only ask ES for chip properties instead of post-processing
-            results = self.elastic.search(body=dsl, size=limit, from_=offset,
-                             index=self.es_index).get('hits')
-            total = results.get('total')
+            es_results = self.elastic.search(body=dsl, size=limit, from_=offset,
+                             index=self.es_index)
+            hits = es_results.get('hits')
+            total = hits.get('total')
             items = [self.to_chip(r.get('_source')) for r in
-                     results.get('hits')]
+                     hits.get('hits')]
+            if statstree:
+                stats = self.build_stats(es_results, limit, q)
 
         for rec in records:
             chip = self.to_chip(self.get_decorated_data(rec.data, include_quoted=False))
             items.append(chip)
 
-
         def ref(link): return {ID: link}
 
-        results = OrderedDict({'@type': 'PagedCollection'})
+        results = OrderedDict({'@type': 'PartialCollectionView'})
         results['@id'] = make_find_url(offset=offset, **page_params)
-        results['itemsPerPage'] = limit
+        #results['itemsPerPage'] = limit
         #if total is not None:
         results['itemOffset'] = offset
         results['totalItems'] = total
-        results['firstPage'] = ref(make_find_url(**page_params))
-        results['query'] = q
+        results['textQuery'] = q
         results['value'] = value
-        #'lastPage' ...
-        if offset:
-            prev_offset = offset - limit
-            if prev_offset <= 0:
-                prev_offset = None
-            results['previousPage'] = ref(make_find_url(offset=prev_offset, **page_params))
-        if len(items) == limit:
-            next_offset = offset + limit if offset else limit
-            results['nextPage'] = ref(make_find_url(offset=next_offset, **page_params))
+
+        results['first'] = ref(make_find_url(**page_params))
+
+        offsets = compute_offsets(total, limit, offset)
+
+        results['last'] = ref(make_find_url(offset=offsets.last, **page_params))
+
+        if offsets.prev is not None:
+            if offsets.prev == 0:
+                results['previous'] = results['first']
+            else:
+                results['previous'] = ref(make_find_url(offset=offsets.prev, **page_params))
+
+        if offsets.next is not None:
+            results['next'] = ref(make_find_url(offset=offsets.next, **page_params))
+
         # hydra:member
         results['items'] = items
+
+        if stats:
+            results['stats'] = stats
 
         return results
 
@@ -139,7 +158,9 @@ class DataView:
     def get_real_limit(self, limit):
         return DEFAULT_LIMIT if limit is None or limit > MAX_LIMIT else limit
 
-    def get_index_aggregate(self, base_uri):
+    def get_index_stats(self, base_uri, limit=50, slicetree=None):
+        slicetree = slicetree or {'@type':[]}
+
         dsl = {
             "size": 0,
             "query" : {
@@ -150,50 +171,72 @@ class DataView:
                     ]
                 }
             },
-            "aggs": {
-                "inScheme.@id": {
-                    "terms": {
-                        "field": "inScheme.@id",
-                        #"size": 1000
-                    },
-                    "aggs": {
-                        #"inCollection.@id": {
-                        #    "terms": {
-                        #        "field": "inCollection.@id",
-                        #        #"size": 1000
-                        #    }
-                        #},
-                        "@type": {
-                            "terms": {
-                                "field": "@type",
-                                #"size": 1000
-                            }
-                        }
-                    }
-                }
-            }
+            "aggs": self.build_agg_query(slicetree)
         }
+
         results = self.elastic.search(body=dsl, size=dsl['size'],
                 index=self.es_index)
+        stats = self.build_stats(results, limit)
 
-        def lookup(item_id):
+        return {TYPE: 'DataCatalog', ID: base_uri, 'statistics': stats}
+
+    def build_agg_query(self, tree, size=1000):
+        query = {}
+        for key in tree:
+            query[key] = {
+                'terms': {'field': key, 'size': size}
+            }
+            if isinstance(tree, dict):
+                query[key]['aggs'] = self.build_agg_query(tree[key], size)
+        return query
+
+    def build_stats(self, results, limit, q='*'):
+        def add_slices(stats, aggregations, base):
+            slice_map = {}
+
+            for agg_key, agg in aggregations.items():
+                observations= []
+                slice_node = {
+                    'dimension': agg_key.replace('.'+ID, ''),
+                    'observation': observations
+                }
+
+                for bucket in agg['buckets']:
+                    item_id = bucket.pop('key')
+                    search_page_url = "{base}&{param}={value}".format(
+                            base=base,
+                            param=agg_key,
+                            value=url_quote(item_id))
+
+                    observation = {
+                        'totalItems': bucket.pop('doc_count'),
+                        'view': {ID: search_page_url},
+                        'object': self.lookup(item_id)
+                    }
+                    observations.append(observation)
+
+                    add_slices(observation, bucket, search_page_url)
+
+                if observations:
+                    slice_map[agg_key] = slice_node
+
+            if slice_map:
+                stats['sliceByDimension'] = slice_map
+
+        stats = {}
+        add_slices(stats, results['aggregations'],
+                base="/find?q={}&limit={}".format(q, limit))
+
+        return stats
+
+    def lookup(self, item_id):
+        if item_id in self.vocab.index:
+            return self.vocab.index[item_id]
+        else:
             data = self.get_record_data(item_id)
-            return get_descriptions(data).entry if data else None
-
-        for path, agg in results['aggregations'].items():
-            for bucket in agg['buckets']:
-                item_id = bucket['key']
-                bucket['resource'] = lookup(item_id)
-                for bucket2 in bucket['@type']['buckets']:
-                    bucket2['resource'] = self.vocab.index[bucket2['key']]
-                #for subkey in ['@type', 'inCollection.@id']:
-                #    if subkey not in bucket:
-                #        continue
-                #    for bucket2 in bucket[subkey]['buckets']:
-                #        key = bucket2['key']
-                #        bucket2['resource'] = self.vocab.index.get(key) or lookup(key)
-
-        return {TYPE: 'WebSite', ID: base_uri, 'statistics': results}
+            if data:
+                return get_descriptions(data).entry if data else None
+        return {ID: item_id, 'label': item_id}
 
     def find_ambiguity(self, request):
         kws = dict(request.args)
@@ -364,9 +407,44 @@ def has_ref(vs, *refs):
 
 def _tokenize(stuff):
     """
-    >>> print(_tokenize("One, Any (1911-)"))
+    >>> print(" ".join(_tokenize("One, Any (1911-)")))
     1911 any one
     """
     return sorted(set(
         re.sub(r'\W(?u)', '', part.lower(), flags=re.UNICODE)
         for part in stuff.split(" ")))
+
+
+Offsets = namedtuple('Offsets', 'prev, next, last')
+
+def compute_offsets(total, limit, offset):
+    """
+    >>> compute_offsets(total=52, limit=20, offset=0)
+    Offsets(prev=None, next=20, last=40)
+
+    >>> compute_offsets(total=52, limit=20, offset=20)
+    Offsets(prev=0, next=40, last=40)
+
+    >>> compute_offsets(total=52, limit=20, offset=40)
+    Offsets(prev=20, next=None, last=40)
+
+    >>> compute_offsets(total=50, limit=10, offset=40)
+    Offsets(prev=30, next=None, last=40)
+    """
+
+    o_prev = offset - limit
+    if o_prev < 0:
+        o_prev = None
+
+    o_next = offset + limit
+    if o_next >= total:
+        o_next = None
+    elif not offset:
+        o_next = limit
+
+    if (offset + limit) >= total:
+        o_last = offset
+    else:
+        o_last = total - (total % limit)
+
+    return Offsets(o_prev, o_next, o_last)
