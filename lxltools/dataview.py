@@ -40,7 +40,7 @@ class DataView:
         if records:
             return records[0].identifier
 
-    def get_search_results(self, req_args, make_find_url, base_uri=None):
+    def get_search_results(self, req_args, make_find_url, site_base_uri=None):
         #s = req_args.get('s')
         p = req_args.get('p')
         o = req_args.get('o')
@@ -86,8 +86,8 @@ class DataView:
                     "bool": {
                         "must": musts,
                         "should": [
-                            {"prefix" : {"@id": base_uri}},
-                            {"prefix" : {"sameAs.@id": base_uri}}
+                            {"prefix" : {"@id": site_base_uri}},
+                            {"prefix" : {"sameAs.@id": site_base_uri}}
                         ],
                         "minimum_should_match": 1
                     }
@@ -158,15 +158,15 @@ class DataView:
     def get_real_limit(self, limit=None):
         return DEFAULT_LIMIT if limit is None or limit > MAX_LIMIT else limit
 
-    def get_index_stats(self, slicetree, make_find_url, base_uri):
+    def get_index_stats(self, slicetree, make_find_url, site_base_uri):
         slicetree = slicetree or {'@type':[]}
         dsl = {
             "size": 0,
             "query" : {
                 "bool": {
                     "should": [
-                        {"prefix" : {"@id": base_uri}},
-                        {"prefix" : {"sameAs.@id": base_uri}}
+                        {"prefix" : {"@id": site_base_uri}},
+                        {"prefix" : {"sameAs.@id": site_base_uri}}
                     ]
                 }
             },
@@ -177,7 +177,7 @@ class DataView:
                 index=self.es_index)
         stats = self.build_stats(results, make_find_url, {'limit': self.get_real_limit()})
 
-        return {TYPE: 'DataCatalog', ID: base_uri, 'statistics': stats}
+        return {TYPE: 'DataCatalog', ID: site_base_uri, 'statistics': stats}
 
     def build_agg_query(self, tree, size=1000):
         query = {}
