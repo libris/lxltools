@@ -106,7 +106,7 @@ class DataView:
             items = [self.to_chip(r.get('_source')) for r in
                      hits.get('hits')]
             if statstree:
-                stats = self.build_stats(es_results, limit, q)
+                stats = self.build_stats(es_results, make_find_url, req_args)
 
         for rec in records:
             chip = self.to_chip(self.get_decorated_data(rec.data, include_quoted=False))
@@ -155,12 +155,11 @@ class DataView:
             offset = int(offset)
         return self.get_real_limit(limit), offset
 
-    def get_real_limit(self, limit):
+    def get_real_limit(self, limit=None):
         return DEFAULT_LIMIT if limit is None or limit > MAX_LIMIT else limit
 
-    def get_index_stats(self, base_uri, limit=50, slicetree=None):
+    def get_index_stats(self, slicetree, make_find_url, base_uri):
         slicetree = slicetree or {'@type':[]}
-
         dsl = {
             "size": 0,
             "query" : {
@@ -176,7 +175,7 @@ class DataView:
 
         results = self.elastic.search(body=dsl, size=dsl['size'],
                 index=self.es_index)
-        stats = self.build_stats(results, limit)
+        stats = self.build_stats(results, make_find_url, {'limit': self.get_real_limit()})
 
         return {TYPE: 'DataCatalog', ID: base_uri, 'statistics': stats}
 
@@ -190,7 +189,7 @@ class DataView:
                 query[key]['aggs'] = self.build_agg_query(tree[key], size)
         return query
 
-    def build_stats(self, results, limit, q='*'):
+    def build_stats(self, results, make_find_url, req_args):
         def add_slices(stats, aggregations, base):
             slice_map = {}
 
@@ -225,7 +224,7 @@ class DataView:
 
         stats = {}
         add_slices(stats, results['aggregations'],
-                base="/find?q={}&limit={}".format(q, limit))
+                base=make_find_url(**req_args))
 
         return stats
 
