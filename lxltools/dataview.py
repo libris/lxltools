@@ -58,6 +58,20 @@ class DataView:
         stats = None
         page_params = {'p': p, 'o': o, 'value': value, 'q': q, 'limit': limit}
 
+        def get_term_chip(termkey):
+            termdfn = self.vocab.index.get(termkey)
+            if not termdfn:
+                return None
+            return {ID: termdfn.get(ID) or termkey, 'label': termdfn['label']}
+
+        mappings = [
+            {
+                'variable': 'q',
+                'predicate': get_term_chip('textQuery'),
+                'value': q
+            }
+        ]
+
         # TODO: unify find_by_relation and find_by_example, support the latter form here too
         if p:
             if o:
@@ -80,6 +94,19 @@ class DataView:
                     continue
                 musts.append({"match": {param: paramvalue}})
                 page_params.setdefault(param, []).append(paramvalue)
+
+                if param == TYPE or param.endswith(ID):
+                    valueprop = 'object'
+                    termkey = param[:-4]
+                    value = {ID: paramvalue}
+                else:
+                    valueprop = 'value'
+                    termkey = param
+                    value = paramvalue
+
+                termchip = get_term_chip(termkey)
+
+                mappings.append({'variable': param, 'predicate': termchip, valueprop: value})
 
             dsl = {
                 "query": {
@@ -120,7 +147,13 @@ class DataView:
         #if total is not None:
         results['itemOffset'] = offset
         results['totalItems'] = total
-        results['textQuery'] = q
+
+        for mapping in mappings[1:]:
+            params = page_params.copy()
+            params.pop(mapping['variable'])
+            mapping['up'] = {ID: make_find_url(offset=offset, **params)}
+        results['search'] = {'mapping': mappings}
+
         results['value'] = value
 
         results['first'] = ref(make_find_url(**page_params))
