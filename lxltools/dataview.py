@@ -40,7 +40,7 @@ class DataView:
         if records:
             return records[0].identifier
 
-    def get_search_results(self, req_args, make_find_url, base_uri=None):
+    def get_search_results(self, req_args, make_find_url, site_base_uri=None):
         #s = req_args.get('s')
         p = req_args.get('p')
         o = req_args.get('o')
@@ -57,6 +57,20 @@ class DataView:
         items = []
         stats = None
         page_params = {'p': p, 'o': o, 'value': value, 'q': q, 'limit': limit}
+
+        def get_term_chip(termkey):
+            termdfn = self.vocab.index.get(termkey)
+            if not termdfn:
+                return None
+            return {ID: termdfn.get(ID) or termkey, 'label': termdfn['label']}
+
+        mappings = [
+            {
+                'variable': 'q',
+                'predicate': get_term_chip('textQuery'),
+                'value': q
+            }
+        ]
 
         # TODO: unify find_by_relation and find_by_example, support the latter form here too
         if p:
@@ -81,13 +95,26 @@ class DataView:
                 musts.append({"match": {param: paramvalue}})
                 page_params.setdefault(param, []).append(paramvalue)
 
+                if param == TYPE or param.endswith(ID):
+                    valueprop = 'object'
+                    termkey = param[:-4]
+                    value = {ID: paramvalue} # TODO: self.lookup(paramvalue, chip=True)
+                else:
+                    valueprop = 'value'
+                    termkey = param
+                    value = paramvalue
+
+                termchip = get_term_chip(termkey)
+
+                mappings.append({'variable': param, 'predicate': termchip, valueprop: value})
+
             dsl = {
                 "query": {
                     "bool": {
                         "must": musts,
                         "should": [
-                            {"prefix" : {"@id": base_uri}},
-                            {"prefix" : {"sameAs.@id": base_uri}}
+                            {"prefix" : {"@id": site_base_uri}},
+                            {"prefix" : {"sameAs.@id": site_base_uri}}
                         ],
                         "minimum_should_match": 1
                     }
@@ -106,7 +133,7 @@ class DataView:
             items = [self.to_chip(r.get('_source')) for r in
                      hits.get('hits')]
             if statstree:
-                stats = self.build_stats(es_results, limit, q)
+                stats = self.build_stats(es_results, make_find_url, req_args)
 
         for rec in records:
             chip = self.to_chip(self.get_decorated_data(rec.data, include_quoted=False))
@@ -120,7 +147,13 @@ class DataView:
         #if total is not None:
         results['itemOffset'] = offset
         results['totalItems'] = total
-        results['textQuery'] = q
+
+        for mapping in mappings[1:]:
+            params = page_params.copy()
+            params.pop(mapping['variable'])
+            mapping['up'] = {ID: make_find_url(offset=offset, **params)}
+        results['search'] = {'mapping': mappings}
+
         results['value'] = value
 
         results['first'] = ref(make_find_url(**page_params))
@@ -155,19 +188,18 @@ class DataView:
             offset = int(offset)
         return self.get_real_limit(limit), offset
 
-    def get_real_limit(self, limit):
+    def get_real_limit(self, limit=None):
         return DEFAULT_LIMIT if limit is None or limit > MAX_LIMIT else limit
 
-    def get_index_stats(self, base_uri, limit=50, slicetree=None):
+    def get_index_stats(self, slicetree, make_find_url, site_base_uri):
         slicetree = slicetree or {'@type':[]}
-
         dsl = {
             "size": 0,
             "query" : {
                 "bool": {
                     "should": [
-                        {"prefix" : {"@id": base_uri}},
-                        {"prefix" : {"sameAs.@id": base_uri}}
+                        {"prefix" : {"@id": site_base_uri}},
+                        {"prefix" : {"sameAs.@id": site_base_uri}}
                     ]
                 }
             },
@@ -176,9 +208,9 @@ class DataView:
 
         results = self.elastic.search(body=dsl, size=dsl['size'],
                 index=self.es_index)
-        stats = self.build_stats(results, limit)
+        stats = self.build_stats(results, make_find_url, {'limit': self.get_real_limit()})
 
-        return {TYPE: 'DataCatalog', ID: base_uri, 'statistics': stats}
+        return {TYPE: 'DataCatalog', ID: site_base_uri, 'statistics': stats}
 
     def build_agg_query(self, tree, size=1000):
         query = {}
@@ -190,7 +222,7 @@ class DataView:
                 query[key]['aggs'] = self.build_agg_query(tree[key], size)
         return query
 
-    def build_stats(self, results, limit, q='*'):
+    def build_stats(self, results, make_find_url, req_args):
         def add_slices(stats, aggregations, base):
             slice_map = {}
 
@@ -225,7 +257,7 @@ class DataView:
 
         stats = {}
         add_slices(stats, results['aggregations'],
-                base="/find?q={}&limit={}".format(q, limit))
+                base=make_find_url(**req_args))
 
         return stats
 
@@ -383,7 +415,12 @@ def _fix_ref(item, alias_map):
     for vs in item.values():
         for v in as_iterable(vs):
             if isinstance(v, dict):
-                mapped = alias_map.get(v.get(ID))
+                v_id = v.get(ID)
+                if isinstance(v_id, list):
+                    # WARN: "Encountered array as ID value
+                    v_id = v[ID] = v_id[0]
+
+                mapped = alias_map.get(v_id)
                 if mapped:
                     v[ID] = mapped
 
