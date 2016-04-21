@@ -98,7 +98,7 @@ class DataView:
                 if param == TYPE or param.endswith(ID):
                     valueprop = 'object'
                     termkey = param[:-4]
-                    value = {ID: paramvalue}
+                    value = {ID: paramvalue} # TODO: self.lookup(paramvalue, chip=True)
                 else:
                     valueprop = 'value'
                     termkey = param
@@ -415,7 +415,12 @@ def _fix_ref(item, alias_map):
     for vs in item.values():
         for v in as_iterable(vs):
             if isinstance(v, dict):
-                mapped = alias_map.get(v.get(ID))
+                v_id = v.get(ID)
+                if isinstance(v_id, list):
+                    # WARN: "Encountered array as ID value
+                    v_id = v[ID] = v_id[0]
+
+                mapped = alias_map.get(v_id)
                 if mapped:
                     v[ID] = mapped
 
