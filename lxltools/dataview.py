@@ -112,14 +112,11 @@ class DataView:
                 "query": {
                     "bool": {
                         "must": musts,
-                        "should": [
-                            {"prefix" : {"@id": site_base_uri}},
-                            {"prefix" : {"sameAs.@id": site_base_uri}}
-                        ],
-                        "minimum_should_match": 1
                     }
                 }
             }
+            if site_base_uri:
+                dsl['query']['bool'].update(self._make_site_filter(site_base_uri))
 
             statstree = {'@type': []}
             if statstree:
@@ -195,16 +192,13 @@ class DataView:
         slicetree = slicetree or {'@type':[]}
         dsl = {
             "size": 0,
-            "query" : {
-                "bool": {
-                    "should": [
-                        {"prefix" : {"@id": site_base_uri}},
-                        {"prefix" : {"sameAs.@id": site_base_uri}}
-                    ]
-                }
-            },
+            "query" : {},
             "aggs": self.build_agg_query(slicetree)
         }
+        if site_base_uri:
+            dsl['query']['bool'] = self._make_site_filter(site_base_uri)
+        else:
+            dsl['query']['match_all'] = {}
 
         results = self.elastic.search(body=dsl, size=dsl['size'],
                 index=self.es_index)
@@ -260,6 +254,15 @@ class DataView:
                 base=make_find_url(**req_args))
 
         return stats
+
+    def _make_site_filter(self, site_base_uri):
+        return {
+            "should": [
+                {"prefix" : {"@id": site_base_uri}},
+                {"prefix" : {"sameAs.@id": site_base_uri}}
+            ],
+            "minimum_should_match": 1
+        }
 
     def lookup(self, item_id):
         if item_id in self.vocab.index:
