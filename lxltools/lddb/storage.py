@@ -140,7 +140,6 @@ class Storage:
         sql = """
             SELECT id, data, manifest, created, modified FROM {tname}
             WHERE {where}
-            ORDER BY id
             LIMIT {limit} OFFSET {offset}
         """.format(tname=self.tname, where=where, limit=limit, offset=offset)
         cursor = self.connection.cursor()
