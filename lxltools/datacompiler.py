@@ -52,19 +52,20 @@ class Compiler:
             for key, node in resultset.items():
                 node = to_desc_form(node, dataset=self.dataset_id,
                         source='/dataset/%s' % name)
-                if self.union_file:
-                    print(json.dumps(node), file=self.union_file)
                 self.write(node, key)
             print()
 
     def write(self, node, name):
-        result = _serialize(node)
-        if result:
+        if self.union_file:
+            print(json.dumps(node), file=self.union_file)
+        # TODO: else: # don't write both to union_file and separate file
+        pretty_repr = _serialize(node)
+        if pretty_repr:
             outfile = Path.join(self.outdir, "%s.jsonld" % name)
             print("Writing:", outfile)
             _ensure_fpath(outfile)
             with open(outfile, 'w') as fp:
-                fp.write(result)
+                fp.write(pretty_repr)
         else:
             print("No data")
 
