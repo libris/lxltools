@@ -130,7 +130,8 @@ class DataView:
             items = [self.to_chip(r.get('_source')) for r in
                      hits.get('hits')]
             if statstree:
-                stats = self.build_stats(es_results, make_find_url, req_args)
+                stats = self.build_stats(es_results, make_find_url,
+                        dict(req_args, offset=None))
 
         for rec in records:
             chip = self.to_chip(self.get_decorated_data(rec.data, include_quoted=False))
