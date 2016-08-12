@@ -26,14 +26,6 @@ class Storage:
         self.vtname = "{0}__versions".format(base_table)
         self.versioning = True
 
-    def setup(self, name):
-        pkg_dir = P.dirname(__file__)
-        with open(P.join(pkg_dir, 'config', '%s.sql' % name)) as fp:
-            create_db_sql = fp.read()
-        cursor = self.connection.cursor()
-        cursor.execute(create_db_sql)
-        self.connection.commit()
-
     @property
     def connection(self):
         if not self._connection or self._connection.closed:
@@ -169,7 +161,7 @@ class Storage:
         Manifested columns such as timestamps aren't redundantly stored within
         the dynamic data. This method injects those details into the result.
         """
-        (identifier, data, manifest, created, modified) = result
+        (identifier, data, created, modified) = result
         created = created.isoformat()
         modified = modified.isoformat()
         manifest['created'] = created
@@ -197,80 +189,6 @@ class Storage:
                 'deleted': result[3]
             }
         return {'exists': False}
-
-
-    # Store methods
-
-    def _calculate_checksum(self, data):
-        return hashlib.md5(json.dumps(data, sort_keys=True).encode('utf-8')).hexdigest()
-
-    def _store(self, cursor, identifier, data, manifest=None):
-        data.pop('modified', None) # Shouldn't influence checksum
-        data.pop('created', None)
-        manifest = manifest or {}
-        manifest['checksum'] = self._calculate_checksum(data)
-        if self.versioning:
-            insert_version_sql = """
-                    INSERT INTO {0} (id,checksum,data,manifest)
-                    SELECT %(identifier)s,%(checksum)s,%(data)s,%(manifest)s
-                    WHERE NOT EXISTS (SELECT 1 FROM {0}
-                    WHERE id = %(identifier)s AND checksum = %(checksum)s)
-                    """.format(self.vtname)
-            cursor.execute(insert_version_sql, {
-                    'identifier': identifier,
-                    'manifest': json.dumps(manifest),
-                    'data': json.dumps(data),
-                    'checksum': manifest['checksum']
-                })
-            logger.debug("Row count: %s", cursor.rowcount)
-
-        if not self.versioning or cursor.rowcount > 0:
-            upsert = """
-                    WITH upsert AS (UPDATE {0}
-                                    SET data = %(data)s,
-                                    modified = %(modified)s,
-                                    manifest = %(manifest)s,
-                                    deleted = %(deleted)s
-                                    WHERE id = %(identifier)s RETURNING *)
-                    INSERT INTO {0} (id, data, manifest, deleted)
-                    SELECT %(identifier)s, %(data)s, %(manifest)s, %(deleted)s
-                    WHERE NOT EXISTS (SELECT * FROM upsert)
-                    """.format(self.tname)
-            cursor.execute(upsert, {
-                    'identifier': identifier,
-                    'data': json.dumps(data),
-                    'manifest': json.dumps(manifest),
-                    'modified': datetime.now(),
-                    'deleted': manifest.get('deleted', False),
-                })
-        return (identifier, data, manifest)
-
-    def store(self, identifier, data, manifest=None):
-        try:
-            cursor = self.connection.cursor()
-            (identifier, data, manifest) = self._store(cursor, identifier, data, manifest)
-            self.connection.commit()
-            # Load results from insert
-            #status = self.get_record_status(identifier)
-            #data['created'] = status['created']
-            #data['modified'] = status['modified']
-        except Exception as e:
-            logger.error("Store failed. Rolling back.", exc_info=True)
-            self.connection.rollback()
-            raise
-        return data
-
-    def bulk_store(self, items):
-        try:
-            cursor = self.connection.cursor()
-            for item in items:
-                self._store(cursor, item[0], item[1], item[2])
-
-            self.connection.commit()
-        except Exception as e:
-            logger.error("Store failed. Rolling back.", exc_info=True)
-            self.connection.rollback()
-            raise
 
 
 Record = namedtuple('Record', 'identifier, data, manifest')
