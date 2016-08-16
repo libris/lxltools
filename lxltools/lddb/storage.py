@@ -39,17 +39,13 @@ class Storage:
     # Load-methods
 
     def get_record(self, identifier):# -> Record
-        import urlparse
-        slug = urlparse.urlparse(identifier).path[1:]
         sql = """
-            SELECT id, data, manifest, created, modified FROM {0}
-            WHERE id = %(slug)s
-                OR manifest->'identifiers' @> %(identifier)s
+            SELECT id, data, created, modified FROM {0}
+            WHERE id IN (SELECT id FROM {0}__identifiers
+                          WHERE identifier = %(identifier)s)
             """.format(self.tname)
         cursor = self.connection.cursor()
-        cursor.execute(sql, {
-                'slug': '"%s"' % slug,
-                'identifier': '"%s"' % identifier})
+        cursor.execute(sql, {'identifier': identifier})
         result = cursor.fetchone()
         if result:
             return self._inject_storage_data(result)
@@ -64,8 +60,7 @@ class Storage:
         sameas_query = '[{"sameAs": %s}]' % ids_query
         sql = """
             SELECT id FROM {0}
-            WHERE manifest->'identifiers' @> %(identifier)s
-                OR data->'@graph' @> %(ids_query)s
+                WHERE data->'@graph' @> %(ids_query)s
                 OR data->'@graph' @> %(sameas_query)s
             """.format(self.tname)
         cursor = self.connection.cursor()
@@ -130,7 +125,7 @@ class Storage:
     def _do_find(self, where, keys, limit, offset):
         offset = offset or 0
         sql = """
-            SELECT id, data, manifest, created, modified FROM {tname}
+            SELECT id, data, created, modified FROM {tname}
             WHERE {where}
             LIMIT {limit} OFFSET {offset}
         """.format(tname=self.tname, where=where, limit=limit, offset=offset)
@@ -146,7 +141,7 @@ class Storage:
         cursor = self.connection.cursor()
         if self.versioning:
             sql = """
-                SELECT id, data, manifest, created, modified FROM {0}
+                SELECT id, data, created, modified FROM {0}
                 WHERE id = %{identifier}s ORDER BY modified ASC
                 """.format( self.vtname)
             cursor.execute(sql, {'identifier': identifier})
@@ -164,9 +159,7 @@ class Storage:
         (identifier, data, created, modified) = result
         created = created.isoformat()
         modified = modified.isoformat()
-        manifest['created'] = created
-        manifest['modified'] = modified
-        return Record(identifier, data, manifest)
+        return Record(identifier, data)
 
     def _assemble_result_list(self, results):
         for result in results:
@@ -191,4 +184,4 @@ class Storage:
         return {'exists': False}
 
 
-Record = namedtuple('Record', 'identifier, data, manifest')
+Record = namedtuple('Record', 'identifier, data')
