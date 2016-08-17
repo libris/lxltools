@@ -88,8 +88,8 @@ class Storage:
         Find records that reference the given identifier by quotation.
         """
         where = """
-            quoted @> %(ref_query)s
-            OR quoted @> %(sameas_query)s
+            data->'@graph' @> %(ref_query)s
+            OR data->'@graph' @> %(sameas_query)s
             """
         keys = {'ref_query': '[{"@graph": {"@id": "%s"}}]' % identifier,
                 'sameas_query': '[{"@graph": {"sameAs": [{"@id": "%s"}]}}]' % identifier}
