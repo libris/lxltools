@@ -56,6 +56,9 @@ class Compiler:
             print()
 
     def write(self, node, name):
+        node_id = node.get('@id')
+        if node_id:
+            assert not node_id.startswith('_:')
         if self.union_file:
             print(json.dumps(node), file=self.union_file)
         # TODO: else: # don't write both to union_file and separate file
