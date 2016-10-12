@@ -48,9 +48,9 @@ class Compiler:
                 print("Dataset:", name)
             basepath, data = self.datasets[name]()
             self.write(data, name)
-            context, resultset = partition_dataset(urljoin(self.dataset_id, basepath), data)
+            context, resultset = _partition_dataset(urljoin(self.dataset_id, basepath), data)
             for key, node in resultset.items():
-                node = to_desc_form(node, dataset=self.dataset_id,
+                node = _to_desc_form(node, dataset=self.dataset_id,
                         source='/dataset/%s' % name)
                 self.write(node, key)
             print()
@@ -187,7 +187,7 @@ def to_jsonld(source, contextref, contextobj=None):
     return data
 
 
-def partition_dataset(base, data):
+def _partition_dataset(base, data):
     resultset = OrderedDict()
     for node in data.pop('@graph'):
         nodeid = node['@id']
@@ -203,7 +203,7 @@ def partition_dataset(base, data):
     return data.get('@context'), resultset
 
 
-def to_desc_form(node, dataset=None, source=None):
+def _to_desc_form(node, dataset=None, source=None):
     item = node.pop('about', None)
     if item:
         node['about'] = {'@id': item['@id']}
