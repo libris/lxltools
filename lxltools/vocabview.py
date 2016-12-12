@@ -175,7 +175,7 @@ class VocabView:
         # - either support containers by properly using the context
         # - or optimize this rewriting
         # - or do not allow this form (remove from base context)
-        for key in item:
+        for key in list(item.keys()):
             if key.endswith('ByLang'):
                 v = item.pop(key).get(self.lang)
                 newk = key[:-len('ByLang')]
