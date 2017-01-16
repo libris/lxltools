@@ -48,23 +48,27 @@ class Compiler:
                 print("Dataset:", name)
             basepath, data = self.datasets[name]()
             self.write(data, name)
-            context, resultset = partition_dataset(urljoin(self.dataset_id, basepath), data)
+            context, resultset = _partition_dataset(urljoin(self.dataset_id, basepath), data)
             for key, node in resultset.items():
-                node = to_desc_form(node, dataset=self.dataset_id,
+                node = _to_desc_form(node, dataset=self.dataset_id,
                         source='/dataset/%s' % name)
-                if self.union_file:
-                    print(json.dumps(node), file=self.union_file)
                 self.write(node, key)
             print()
 
     def write(self, node, name):
-        result = _serialize(node)
-        if result:
+        node_id = node.get('@id')
+        if node_id:
+            assert not node_id.startswith('_:')
+        if self.union_file:
+            print(json.dumps(node), file=self.union_file)
+        # TODO: else: # don't write both to union_file and separate file
+        pretty_repr = _serialize(node)
+        if pretty_repr:
             outfile = Path.join(self.outdir, "%s.jsonld" % name)
             print("Writing:", outfile)
             _ensure_fpath(outfile)
             with open(outfile, 'w') as fp:
-                fp.write(result)
+                fp.write(pretty_repr)
         else:
             print("No data")
 
@@ -183,7 +187,7 @@ def to_jsonld(source, contextref, contextobj=None):
     return data
 
 
-def partition_dataset(base, data):
+def _partition_dataset(base, data):
     resultset = OrderedDict()
     for node in data.pop('@graph'):
         nodeid = node['@id']
@@ -199,7 +203,7 @@ def partition_dataset(base, data):
     return data.get('@context'), resultset
 
 
-def to_desc_form(node, dataset=None, source=None):
+def _to_desc_form(node, dataset=None, source=None):
     item = node.pop('about', None)
     if item:
         node['about'] = {'@id': item['@id']}

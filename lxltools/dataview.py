@@ -23,7 +23,7 @@ class DataView:
         self.elastic = elastic
         self.es_index = es_index
         self.rev_limit = 4000
-        self.chip_keys = {ID, TYPE, 'focus', 'mainEntity', 'sameAs'} | set(self.vocab.label_keys)
+        self.chip_keys = {ID, TYPE, 'focus', 'mainEntity', 'sameAs', 'isDefinedBy', 'inScheme', 'inCollection'} | set(self.vocab.label_keys)
         self.reserved_parameters = ['q', 'limit', 'offset', 'p', 'o', 'value']
 
     def get_record_data(self, item_id):
@@ -112,14 +112,11 @@ class DataView:
                 "query": {
                     "bool": {
                         "must": musts,
-                        "should": [
-                            {"prefix" : {"@id": site_base_uri}},
-                            {"prefix" : {"sameAs.@id": site_base_uri}}
-                        ],
-                        "minimum_should_match": 1
                     }
                 }
             }
+            if site_base_uri:
+                dsl['query']['bool'].update(self._make_site_filter(site_base_uri))
 
             statstree = {'@type': []}
             if statstree:
@@ -133,7 +130,8 @@ class DataView:
             items = [self.to_chip(r.get('_source')) for r in
                      hits.get('hits')]
             if statstree:
-                stats = self.build_stats(es_results, make_find_url, req_args)
+                stats = self.build_stats(es_results, make_find_url,
+                        dict(req_args, offset=None))
 
         for rec in records:
             chip = self.to_chip(self.get_decorated_data(rec.data, include_quoted=False))
@@ -195,16 +193,13 @@ class DataView:
         slicetree = slicetree or {'@type':[]}
         dsl = {
             "size": 0,
-            "query" : {
-                "bool": {
-                    "should": [
-                        {"prefix" : {"@id": site_base_uri}},
-                        {"prefix" : {"sameAs.@id": site_base_uri}}
-                    ]
-                }
-            },
+            "query" : {},
             "aggs": self.build_agg_query(slicetree)
         }
+        if site_base_uri:
+            dsl['query']['bool'] = self._make_site_filter(site_base_uri)
+        else:
+            dsl['query']['match_all'] = {}
 
         results = self.elastic.search(body=dsl, size=dsl['size'],
                 index=self.es_index)
@@ -260,6 +255,15 @@ class DataView:
                 base=make_find_url(**req_args))
 
         return stats
+
+    def _make_site_filter(self, site_base_uri):
+        return {
+            "should": [
+                {"prefix" : {"@id": site_base_uri}},
+                {"prefix" : {"sameAs.@id": site_base_uri}}
+            ],
+            "minimum_should_match": 1
+        }
 
     def lookup(self, item_id):
         if item_id in self.vocab.index:

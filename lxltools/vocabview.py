@@ -76,15 +76,16 @@ class VocabView:
         self.unstable_keys = set()
         self.lang = lang
 
-        label_key_items = []
-
         g = vocab_graph
         default_ns = g.store.namespace('')
 
         get_key = lambda s: s.replace(vocab_uri, '')
 
-        PREF_LABEL = URIRef(vocab_uri + 'prefLabel')
-        BASE_LABEL = URIRef(vocab_uri + 'label')
+        VOCAB = Namespace(vocab_uri)
+        PREF_LABEL = VOCAB.prefLabel
+        BASE_LABEL = VOCAB.label
+
+        label_key_items = [(0, 'hasTitle')]
 
         for s in set(g.subjects()):
             if not isinstance(s, URIRef):
@@ -174,7 +175,7 @@ class VocabView:
         # - either support containers by properly using the context
         # - or optimize this rewriting
         # - or do not allow this form (remove from base context)
-        for key in item:
+        for key in list(item.keys()):
             if key.endswith('ByLang'):
                 v = item.pop(key).get(self.lang)
                 newk = key[:-len('ByLang')]
@@ -190,10 +191,12 @@ class VocabView:
             label = self.construct_label(focus)
             if label:
                 return label
+
         if 'prefLabel' not in item: # ComplexTerm in types
             termparts = item.get('termParts', [])
             if termparts:
                 return " - ".join(self.labelgetter(bit) for bit in termparts)
+
         return self.labelgetter(item)
 
     def construct_label(self, item):

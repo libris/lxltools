@@ -26,14 +26,6 @@ class Storage:
         self.vtname = "{0}__versions".format(base_table)
         self.versioning = True
 
-    def setup(self, name):
-        pkg_dir = P.dirname(__file__)
-        with open(P.join(pkg_dir, 'config', '%s.sql' % name)) as fp:
-            create_db_sql = fp.read()
-        cursor = self.connection.cursor()
-        cursor.execute(create_db_sql)
-        self.connection.commit()
-
     @property
     def connection(self):
         if not self._connection or self._connection.closed:
@@ -47,17 +39,13 @@ class Storage:
     # Load-methods
 
     def get_record(self, identifier):# -> Record
-        import urlparse
-        slug = urlparse.urlparse(identifier).path[1:]
         sql = """
-            SELECT id, data, manifest, created, modified FROM {0}
-            WHERE id = %(slug)s
-                OR manifest->'identifiers' @> %(identifier)s
+            SELECT id, data, created, modified FROM {0}
+            WHERE id IN (SELECT id FROM {0}__identifiers
+                          WHERE identifier = %(identifier)s)
             """.format(self.tname)
         cursor = self.connection.cursor()
-        cursor.execute(sql, {
-                'slug': '"%s"' % slug,
-                'identifier': '"%s"' % identifier})
+        cursor.execute(sql, {'identifier': identifier})
         result = cursor.fetchone()
         if result:
             return self._inject_storage_data(result)
@@ -72,8 +60,7 @@ class Storage:
         sameas_query = '[{"sameAs": %s}]' % ids_query
         sql = """
             SELECT id FROM {0}
-            WHERE manifest->'identifiers' @> %(identifier)s
-                OR data->'@graph' @> %(ids_query)s
+                WHERE data->'@graph' @> %(ids_query)s
                 OR data->'@graph' @> %(sameas_query)s
             """.format(self.tname)
         cursor = self.connection.cursor()
@@ -101,8 +88,8 @@ class Storage:
         Find records that reference the given identifier by quotation.
         """
         where = """
-            quoted @> %(ref_query)s
-            OR quoted @> %(sameas_query)s
+            data->'@graph' @> %(ref_query)s
+            OR data->'@graph' @> %(sameas_query)s
             """
         keys = {'ref_query': '[{"@graph": {"@id": "%s"}}]' % identifier,
                 'sameas_query': '[{"@graph": {"sameAs": [{"@id": "%s"}]}}]' % identifier}
@@ -138,7 +125,7 @@ class Storage:
     def _do_find(self, where, keys, limit, offset):
         offset = offset or 0
         sql = """
-            SELECT id, data, manifest, created, modified FROM {tname}
+            SELECT id, data, created, modified FROM {tname}
             WHERE {where}
             LIMIT {limit} OFFSET {offset}
         """.format(tname=self.tname, where=where, limit=limit, offset=offset)
@@ -154,7 +141,7 @@ class Storage:
         cursor = self.connection.cursor()
         if self.versioning:
             sql = """
-                SELECT id, data, manifest, created, modified FROM {0}
+                SELECT id, data, created, modified FROM {0}
                 WHERE id = %{identifier}s ORDER BY modified ASC
                 """.format( self.vtname)
             cursor.execute(sql, {'identifier': identifier})
@@ -169,12 +156,10 @@ class Storage:
         Manifested columns such as timestamps aren't redundantly stored within
         the dynamic data. This method injects those details into the result.
         """
-        (identifier, data, manifest, created, modified) = result
+        (identifier, data, created, modified) = result
         created = created.isoformat()
         modified = modified.isoformat()
-        manifest['created'] = created
-        manifest['modified'] = modified
-        return Record(identifier, data, manifest)
+        return Record(identifier, data)
 
     def _assemble_result_list(self, results):
         for result in results:
@@ -199,78 +184,4 @@ class Storage:
         return {'exists': False}
 
 
-    # Store methods
-
-    def _calculate_checksum(self, data):
-        return hashlib.md5(json.dumps(data, sort_keys=True).encode('utf-8')).hexdigest()
-
-    def _store(self, cursor, identifier, data, manifest=None):
-        data.pop('modified', None) # Shouldn't influence checksum
-        data.pop('created', None)
-        manifest = manifest or {}
-        manifest['checksum'] = self._calculate_checksum(data)
-        if self.versioning:
-            insert_version_sql = """
-                    INSERT INTO {0} (id,checksum,data,manifest)
-                    SELECT %(identifier)s,%(checksum)s,%(data)s,%(manifest)s
-                    WHERE NOT EXISTS (SELECT 1 FROM {0}
-                    WHERE id = %(identifier)s AND checksum = %(checksum)s)
-                    """.format(self.vtname)
-            cursor.execute(insert_version_sql, {
-                    'identifier': identifier,
-                    'manifest': json.dumps(manifest),
-                    'data': json.dumps(data),
-                    'checksum': manifest['checksum']
-                })
-            logger.debug("Row count: %s", cursor.rowcount)
-
-        if not self.versioning or cursor.rowcount > 0:
-            upsert = """
-                    WITH upsert AS (UPDATE {0}
-                                    SET data = %(data)s,
-                                    modified = %(modified)s,
-                                    manifest = %(manifest)s,
-                                    deleted = %(deleted)s
-                                    WHERE id = %(identifier)s RETURNING *)
-                    INSERT INTO {0} (id, data, manifest, deleted)
-                    SELECT %(identifier)s, %(data)s, %(manifest)s, %(deleted)s
-                    WHERE NOT EXISTS (SELECT * FROM upsert)
-                    """.format(self.tname)
-            cursor.execute(upsert, {
-                    'identifier': identifier,
-                    'data': json.dumps(data),
-                    'manifest': json.dumps(manifest),
-                    'modified': datetime.now(),
-                    'deleted': manifest.get('deleted', False),
-                })
-        return (identifier, data, manifest)
-
-    def store(self, identifier, data, manifest=None):
-        try:
-            cursor = self.connection.cursor()
-            (identifier, data, manifest) = self._store(cursor, identifier, data, manifest)
-            self.connection.commit()
-            # Load results from insert
-            #status = self.get_record_status(identifier)
-            #data['created'] = status['created']
-            #data['modified'] = status['modified']
-        except Exception as e:
-            logger.error("Store failed. Rolling back.", exc_info=True)
-            self.connection.rollback()
-            raise
-        return data
-
-    def bulk_store(self, items):
-        try:
-            cursor = self.connection.cursor()
-            for item in items:
-                self._store(cursor, item[0], item[1], item[2])
-
-            self.connection.commit()
-        except Exception as e:
-            logger.error("Store failed. Rolling back.", exc_info=True)
-            self.connection.rollback()
-            raise
-
-
-Record = namedtuple('Record', 'identifier, data, manifest')
+Record = namedtuple('Record', 'identifier, data')
