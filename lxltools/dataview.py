@@ -23,7 +23,7 @@ class DataView:
         self.elastic = elastic
         self.es_index = es_index
         self.rev_limit = 4000
-        self.chip_keys = {ID, TYPE, 'focus', 'mainEntity', 'sameAs'} | set(self.vocab.label_keys)
+        self.chip_keys = {ID, TYPE, 'focus', 'mainEntity', 'sameAs', 'isDefinedBy', 'inScheme', 'inCollection'} | set(self.vocab.label_keys)
         self.reserved_parameters = ['q', 'limit', 'offset', 'p', 'o', 'value']
 
     def get_record_data(self, item_id):
