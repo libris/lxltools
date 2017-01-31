@@ -22,7 +22,11 @@ class Compiler:
         self.union = union
 
     def dataset(self, func):
-        self.datasets[func.__name__] = func
+        self.datasets[func.__name__] = func, True
+        return func
+
+    def handler(self, func):
+        self.datasets[func.__name__] = func, False
         return func
 
     def configure(self, outdir, cachedir=None, use_union=False):
@@ -44,15 +48,18 @@ class Compiler:
 
     def _compile_datasets(self, names):
         for name in names:
+            build, as_dataset = self.datasets[name]
             if len(names) > 1:
                 print("Dataset:", name)
-            basepath, data = self.datasets[name]()
-            self.write(data, name)
-            context, resultset = _partition_dataset(urljoin(self.dataset_id, basepath), data)
-            for key, node in resultset.items():
-                node = _to_desc_form(node, dataset=self.dataset_id,
-                        source='/dataset/%s' % name)
-                self.write(node, key)
+            if as_dataset:
+                base, data = build()
+                context, resultset = _partition_dataset(urljoin(self.dataset_id, base), data)
+                for key, node in resultset.items():
+                    node = _to_desc_form(node, dataset=self.dataset_id,
+                            source='/dataset/%s' % name)
+                    self.write(node, key)
+            else:
+                build()
             print()
 
     def write(self, node, name):
