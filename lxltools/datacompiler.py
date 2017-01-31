@@ -113,6 +113,7 @@ def _serialize(data):
         data = data.encode('utf-8')
     return data
 
+
 def _ensure_fpath(fpath):
     fdir = Path.dirname(fpath)
     if not Path.isdir(fdir):
@@ -168,23 +169,33 @@ def to_jsonld(source, contextref, contextobj=None):
     context = [contextpath, contextobj] if contextobj else contextpath
     data = from_rdf(source, context_data=context)
     data['@context'] = [contexturi, contextobj] if contextobj else contexturi
-
-    # customize to a convenient shape (within the bounds of JSON-LD)
-    base = contextobj.get('@base') if contextobj else None
-    to_embed = {}
-    refs = {}
-    for node in data['@graph']:
-        nodeid = node['@id']
-        if base and nodeid.startswith(base):
-            node['@id'] = nodeid[len(base)-1:]
-        elif nodeid.startswith('_:'):
-            to_embed[nodeid] = node
-            continue
-    for idref, obj in refs.items():
-        obj.update(to_embed[idref])
-        #del obj['@id']
-
+    _embed_singly_referenced_bnodes(data)
     return data
+
+
+def _embed_singly_referenced_bnodes(data):
+    graph_index = {item['@id']: item for item in data.pop('@graph')}
+    bnode_refs = {}
+
+    def collect_refs(node):
+        for values in node.values():
+            if not isinstance(values, list):
+                values = [values]
+            for value in values:
+                if isinstance(value, dict):
+                    if value.get('@id', '').startswith('_:'):
+                        bnode_refs.setdefault(value['@id'], []).append(value)
+                    collect_refs(value)
+
+    for node in graph_index.values():
+        collect_refs(node)
+
+    for refid, refs in bnode_refs.items():
+        if len(refs) == 1:
+            refs[0].update(graph_index.pop(refid))
+            refs[0].pop('@id')
+
+    data['@graph'] = sorted(graph_index.values(), key=lambda node: node['@id'])
 
 
 def _partition_dataset(base, data):
