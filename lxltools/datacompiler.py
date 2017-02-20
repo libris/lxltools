@@ -56,10 +56,14 @@ class Compiler:
                 base, data = result
                 context, resultset = _partition_dataset(urljoin(self.dataset_id, base), data)
                 for key, node in resultset.items():
-                    node = _to_desc_form(node, dataset=self.dataset_id,
+                    node = self.to_node_description(node,
+                            dataset=self.dataset_id,
                             source='/dataset/%s' % name)
                     self.write(node, key)
             print()
+
+    def to_node_description(self, node, **kwargs):
+        return {'@graph': [node]} if '@graph' not in node else node
 
     def write(self, node, name):
         node_id = node.get('@id')
@@ -218,33 +222,3 @@ def _partition_dataset(base, data):
         rel_path = urlparse(nodeid).path[1:]
         resultset[rel_path] = node
     return data.get('@context'), resultset
-
-
-def _to_desc_form(node, dataset=None, source=None):
-    # TODO: overhaul these?
-    item = node.pop('mainEntity', None) # TODO: obsolete?
-    if item:
-        node['mainEntity'] = {'@id': item['@id']}
-    #if dataset:
-    #    node['inDataset'] = {'@id': dataset}
-    #if source:
-    #    node['wasDerivedFrom'] = {'@id': source}
-
-    items = [node]
-    if item:
-        items.append(item)
-
-    #quoted = OrderedDict()
-    #for vs in node.values():
-    #    vs = vs if isinstance(vs, list) else [vs]
-    #    for v in vs:
-    #        if isinstance(v, dict) and '@id' in v:
-    #            qid = v['@id']
-    #            quoted[qid] = {'@graph': [{'@id': qid}]}
-    ## TODO: move addition of 'quoted' objects to (decorated) storage?
-    ## ... let storage accept a single resource or named graph
-    ## (with optional, "nested" quotes), and extract links (and sameAs)
-    #if quoted:
-    #    items += quoted.values()
-
-    return {'@graph': items}
