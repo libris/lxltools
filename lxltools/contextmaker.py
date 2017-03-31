@@ -76,10 +76,19 @@ def termdef(term, ns_pref_order=None, use_sub=False):
     if is_class:
         return curie
 
-    range_type = term.value(RDFS.range)
-    range_iri = range_type and range_type.id
-    if range_iri and range_iri.startswith(XSD) or range_iri == RDFS.Literal:
-        datatype = range_type.qname()
+    islist = False
+    datatype = None
+    for range_type in term.objects(RDFS.range):
+        if range_type.id:
+            if range_type.id.startswith(XSD):
+                datatype = range_type
+                break
+            elif range_type.id == RDF.List:
+                islist = True
+                break
+
+    if datatype:
+        datatype = datatype.qname()
     elif OWL.DatatypeProperty in types:
         datatype = False
     else:
@@ -87,7 +96,7 @@ def termdef(term, ns_pref_order=None, use_sub=False):
 
     if types & {RDF.Property, OWL.FunctionalProperty}:
         container = None
-    elif range_iri == RDF.List:
+    elif islist:
         container = "@list"
     #elif OWL.ObjectProperty in types:
     #    container = "@set"
