@@ -17,6 +17,8 @@ from rdflib import ConjunctiveGraph, Graph, RDF, URIRef
 from rdflib_jsonld.serializer import from_rdf
 from rdflib_jsonld.parser import to_rdf
 
+from . import lxlslug
+
 
 class Compiler:
 
@@ -116,7 +118,29 @@ class Compiler:
             print()
 
     def _to_node_description(self, node, datasource_created_ms, dataset=None, source=None):
-        return {'@graph': [node]} if '@graph' not in node else node
+        # TODO: overhaul these? E.g. mainEntity with timestamp and 'datasource'.
+        assert self.record_thing_link not in node
+
+        #print(dataset, source)
+
+        def faux_offset(s):
+            return sum(ord(c) * ((i+1) ** 2)  for i, c in enumerate(s))
+
+        created_ms = datasource_created_ms + faux_offset(node['@id'])
+        slug = lxlslug.librisencode(created_ms, lxlslug.checksum(node['@id']))
+
+        record_id = self.system_iri_base + slug
+        record = OrderedDict()
+        record['@id'] = record_id
+        record[self.record_thing_link] = {'@id': node['@id']}
+        #if dataset:
+        #    node['inDataset'] = {'@id': dataset}
+        #if source:
+        #    node['wasDerivedFrom'] = {'@id': source}
+
+        items = [record, node]
+
+        return {'@graph': items}
 
     def write(self, node, name):
         node_id = node.get('@id')
