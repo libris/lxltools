@@ -1,12 +1,17 @@
 from __future__ import unicode_literals, print_function
 __metaclass__ = type
+import argparse
 from collections import OrderedDict
-from os import makedirs, path as Path
+try:
+    from pathlib import Path
+except ImportError:
+    from pathlib2 import Path
 from urlparse import urlparse, urljoin
 import urllib2
 import sys
 import json
 import csv
+import time
 
 from rdflib import ConjunctiveGraph, Graph, RDF, URIRef
 from rdflib_jsonld.serializer import from_rdf
@@ -15,11 +20,56 @@ from rdflib_jsonld.parser import to_rdf
 
 class Compiler:
 
-    def __init__(self, dataset_id=None, union='all.jsonld.lines'):
+    def __init__(self,
+                 base_dir=None,
+                 dataset_id=None,
+                 context=None,
+                 record_thing_link='mainEntity',
+                 system_iri_base=None,
+                 union='all.jsonld.lines'):
         self.datasets = {}
+        self.base_dir = Path(base_dir)
         self.dataset_id = dataset_id
+        self.system_iri_base = system_iri_base
+        self.record_thing_link = record_thing_link
+        self.context = context
         self.cachedir = None
         self.union = union
+
+    def main(self):
+        argp = argparse.ArgumentParser(
+                description="Available datasets: " + ", ".join(self.datasets),
+                formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+        arg = argp.add_argument
+        arg('-o', '--outdir', type=str, default=self.path("build"), help="Output directory")
+        arg('-c', '--cache', type=str, default=self.path("cache"), help="Cache directory")
+        arg('-l', '--lines', action='store_true',
+                help="Output a single file with one JSON-LD document per line")
+        arg('datasets', metavar='DATASET', nargs='*')
+
+        args = argp.parse_args()
+        if not args.datasets and args.outdir:
+            args.datasets = list(self.datasets)
+
+        self._configure(args.outdir, args.cache, use_union=args.lines)
+        self._run(args.datasets)
+
+    def _configure(self, outdir, cachedir=None, use_union=False):
+        self.outdir = Path(outdir)
+        self.cachedir = cachedir
+        if use_union:
+            union_fpath = self.outdir / self.union
+            union_fpath.parent.mkdir(parents=True, exist_ok=True)
+            self.union_file = union_fpath.open('wb')
+        else:
+            self.union_file = None
+
+    def _run(self, names):
+        try:
+            self._compile_datasets(names)
+        finally:
+            if self.union_file:
+                self.union_file.close()
 
     def dataset(self, func):
         self.datasets[func.__name__] = func, True
@@ -29,22 +79,12 @@ class Compiler:
         self.datasets[func.__name__] = func, False
         return func
 
-    def configure(self, outdir, cachedir=None, use_union=False):
-        self.outdir = outdir
-        self.cachedir = cachedir
-        if use_union:
-            union_fpath = Path.join(self.outdir, self.union)
-            _ensure_fpath(union_fpath)
-            self.union_file = open(union_fpath, 'w')
-        else:
-            self.union_file = None
+    def path(self, pth):
+        return self.base_dir / pth
 
-    def run(self, names):
-        try:
-            self._compile_datasets(names)
-        finally:
-            if self.union_file:
-                self.union_file.close()
+    def to_jsonld(self, graph):
+        return _to_jsonld(graph,
+                         ("../" + self.context, str(self.path(self.context))))
 
     def _compile_datasets(self, names):
         for name in names:
@@ -53,16 +93,29 @@ class Compiler:
                 print("Dataset:", name)
             result = build()
             if as_dataset:
-                base, data = result
+                base, created_time, data = result
+
+                created_time, ms = created_time.rsplit('.', 1)
+                if ms.endswith('Z'):
+                    ms = ms[:-1]
+                created_ms = int(time.mktime(time.strptime(created_time,
+                                             "%Y-%m-%dT%H:%M:%S"))
+                                 * 1000 + int(ms))
+
+                if isinstance(data, Graph):
+                    data = self.to_jsonld(data)
+
                 context, resultset = _partition_dataset(urljoin(self.dataset_id, base), data)
+
                 for key, node in resultset.items():
-                    node = self.to_node_description(node,
+                    node = self._to_node_description(node,
+                            created_ms,
                             dataset=self.dataset_id,
                             source='/dataset/%s' % name)
                     self.write(node, key)
             print()
 
-    def to_node_description(self, node, **kwargs):
+    def _to_node_description(self, node, datasource_created_ms, dataset=None, source=None):
         return {'@graph': [node]} if '@graph' not in node else node
 
     def write(self, node, name):
@@ -74,21 +127,21 @@ class Compiler:
         # TODO: else: # don't write both to union_file and separate file
         pretty_repr = _serialize(node)
         if pretty_repr:
-            outfile = Path.join(self.outdir, "%s.jsonld" % name)
+            outfile = self.outdir / ("%s.jsonld" % name)
             print("Writing:", outfile)
-            _ensure_fpath(outfile)
-            with open(outfile, 'w') as fp:
+            outfile.parent.mkdir(parents=True, exist_ok=True)
+            with outfile.open('wb') as fp:
                 fp.write(pretty_repr)
         else:
             print("No data")
 
     def get_cached_path(self, url):
-        return Path.join(self.cachedir, urllib2.quote(url, safe=""))
+        return self.cachedir / urllib2.quote(url, safe="")
 
     def cache_url(self, url):
         path = self.get_cached_path(url)
-        if not Path.exists(path):
-            with open(path, 'wb') as fp:
+        if not path.exists():
+            with path.open('wb') as fp:
                 r = urllib2.urlopen(url)
                 while True:
                     chunk = r.read(1024 * 8)
@@ -103,16 +156,26 @@ class Compiler:
             print("No cache directory configured", file=sys.stderr)
         elif fpath.startswith(http):
             remotepath = fpath
-            fpath = Path.join(self.cachedir, remotepath[len(http):]) + '.ttl'
-            if not Path.isfile(fpath):
-                _ensure_fpath(fpath)
+            fpath = self.cachedir / (remotepath[len(http):] + '.ttl')
+            if not fpath.is_file():
+                fpath.parent.mkdir(parents=True, exist_ok=True)
                 source.parse(remotepath)
-                source.serialize(fpath, format='turtle')
+                source.serialize(str(fpath), format='turtle')
                 return source
             else:
-                return source.parse(fpath, format='turtle')
-        source.parse(fpath)
+                return source.parse(str(fpath), format='turtle')
+        source.parse(str(fpath))
         return source
+
+    def load_json(self, fpath):
+        with self.path(fpath).open() as fp:
+            return json.load(fp)
+
+    def read_csv(self, fpath, **kws):
+        return _read_csv(self.path(fpath), **kws)
+
+    def construct(self, sources, query=None):
+        return _construct(self, sources, query)
 
 
 def _serialize(data):
@@ -124,49 +187,40 @@ def _serialize(data):
     return data
 
 
-def _ensure_fpath(fpath):
-    fdir = Path.dirname(fpath)
-    if not Path.isdir(fdir):
-        makedirs(fdir)
+CSV_FORMATS = {'.csv': 'excel', '.tsv': 'excel-tab'}
 
-
-def load_json(fpath):
-    with open(fpath) as fp:
-        return json.load(fp)
-
-
-def read_csv(fpath, encoding='utf-8'):
-    csv_dialect = ('excel' if fpath.endswith('.csv')
-            else 'excel-tab' if fpath.endswith('.tsv')
-            else None)
+def _read_csv(fpath, encoding='utf-8'):
+    csv_dialect = CSV_FORMATS.get(fpath.suffix)
     assert csv_dialect
-    with open(fpath, 'rb') as fp:
+    with fpath.open('rb') as fp:
         reader = csv.DictReader(fp, dialect=csv_dialect)
         for item in reader:
             yield {k: v.decode(encoding).strip()
                             for (k, v) in item.items() if v}
 
 
-def decorate(items, template):
-    def decorator(item):
-        for k, tplt in template.items():
-            item[k] = tplt.format(**item)
-        return item
-    return map(decorator, items)
-
-
-def construct(load_rdf, sources, query):
+def _construct(compiler, sources, query=None):
     dataset = ConjunctiveGraph()
+    if not isinstance(sources, list):
+        sources = [sources]
     for sourcedfn in sources:
         source = sourcedfn['source']
         graph = dataset.get_context(URIRef(sourcedfn.get('dataset') or source))
         if isinstance(source, (dict, list)):
-            to_rdf(source, graph, context_data=sourcedfn['context'])
+            context_data = sourcedfn['context']
+            if not isinstance(context_data, list):
+                context_data = compiler.load_json(context_data )['@context']
+            context_data = [compiler.load_json(ctx)['@context']
+                            if isinstance(ctx, unicode) else ctx
+                            for ctx in context_data]
+            to_rdf(source, graph, context_data=context_data)
         elif isinstance(source, Graph):
             graph += source
         else:
-            graph += load_rdf(source)
-    with open(query) as fp:
+            graph += compiler.cached_rdf(source)
+    if not query:
+        return graph
+    with compiler.path(query).open() as fp:
         result = dataset.query(fp.read())
     g = Graph()
     for spo in result:
@@ -174,7 +228,7 @@ def construct(load_rdf, sources, query):
     return g
 
 
-def to_jsonld(source, contextref, contextobj=None):
+def _to_jsonld(source, contextref, contextobj=None):
     contexturi, contextpath = contextref
     context = [contextpath, contextobj] if contextobj else contextpath
     data = from_rdf(source, context_data=context)
