@@ -27,12 +27,12 @@ class Compiler:
                  dataset_id=None,
                  context=None,
                  record_thing_link='mainEntity',
-                 system_iri_base=None,
+                 system_base_iri=None,
                  union='all.jsonld.lines'):
         self.datasets = {}
         self.base_dir = Path(base_dir)
         self.dataset_id = dataset_id
-        self.system_iri_base = system_iri_base
+        self.system_base_iri = system_base_iri
         self.record_thing_link = record_thing_link
         self.context = context
         self.cachedir = None
@@ -43,6 +43,7 @@ class Compiler:
                 description="Available datasets: " + ", ".join(self.datasets),
                 formatter_class=argparse.ArgumentDefaultsHelpFormatter)
         arg = argp.add_argument
+        arg('-s', '--system-base-iri', type=str, default=None, help="System base IRI")
         arg('-o', '--outdir', type=str, default=self.path("build"), help="Output directory")
         arg('-c', '--cache', type=str, default=self.path("cache"), help="Cache directory")
         arg('-l', '--lines', action='store_true',
@@ -53,10 +54,12 @@ class Compiler:
         if not args.datasets and args.outdir:
             args.datasets = list(self.datasets)
 
-        self._configure(args.outdir, args.cache, use_union=args.lines)
+        self._configure(args.outdir, args.cache, args.system_base_iri, use_union=args.lines)
         self._run(args.datasets)
 
-    def _configure(self, outdir, cachedir=None, use_union=False):
+    def _configure(self, outdir, cachedir=None, system_base_iri=None, use_union=False):
+        if system_base_iri:
+            self.system_base_iri = system_base_iri
         self.outdir = Path(outdir)
         self.cachedir = cachedir
         if use_union:
@@ -97,12 +100,7 @@ class Compiler:
             if as_dataset:
                 base, created_time, data = result
 
-                created_time, ms = created_time.rsplit('.', 1)
-                if ms.endswith('Z'):
-                    ms = ms[:-1]
-                created_ms = int(time.mktime(time.strptime(created_time,
-                                             "%Y-%m-%dT%H:%M:%S"))
-                                 * 1000 + int(ms))
+                created_ms = self.ztime_to_millis(created_time)
 
                 if isinstance(data, Graph):
                     data = self.to_jsonld(data)
@@ -118,29 +116,42 @@ class Compiler:
             print()
 
     def _to_node_description(self, node, datasource_created_ms, dataset=None, source=None):
-        # TODO: overhaul these? E.g. mainEntity with timestamp and 'datasource'.
         assert self.record_thing_link not in node
-
-        #print(dataset, source)
 
         def faux_offset(s):
             return sum(ord(c) * ((i+1) ** 2)  for i, c in enumerate(s))
 
-        created_ms = datasource_created_ms + faux_offset(node['@id'])
-        slug = lxlslug.librisencode(created_ms, lxlslug.checksum(node['@id']))
+        node_id = node['@id']
+        created_ms = datasource_created_ms + faux_offset(node_id)
 
-        record_id = self.system_iri_base + slug
         record = OrderedDict()
-        record['@id'] = record_id
-        record[self.record_thing_link] = {'@id': node['@id']}
-        #if dataset:
-        #    node['inDataset'] = {'@id': dataset}
-        #if source:
-        #    node['wasDerivedFrom'] = {'@id': source}
+        record['@id'] = self.generate_record_id(created_ms, node_id)
+        record[self.record_thing_link] = {'@id': node_id}
+
+        # Add provenance
+        # TODO: overhaul these? E.g. mainEntity with timestamp and 'datasource'.
+        #print(dataset, source)
+        #record['created'] = date_created
+        #record['modified'] = date_modified
+        #if datasource:
+        #    record['datasource'] = {'@id': datasource}
 
         items = [record, node]
 
         return {'@graph': items}
+
+    def ztime_to_millis(self, ztime):
+        assert ztime.endswith('Z')
+        ztime, ms = ztime.rsplit('.', 1)
+        if ms.endswith('Z'):
+            ms = ms[:-1]
+        return int(time.mktime(time.strptime(ztime,
+                                             "%Y-%m-%dT%H:%M:%S"))
+                   * 1000 + int(ms))
+
+    def generate_record_id(self, created_ms, node_id):
+        slug = lxlslug.librisencode(created_ms, lxlslug.checksum(node_id))
+        return urljoin(self.system_base_iri, slug)
 
     def write(self, node, name):
         node_id = node.get('@id')
