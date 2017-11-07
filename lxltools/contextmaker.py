@@ -1,6 +1,6 @@
 from __future__ import unicode_literals, print_function
 import json
-from rdflib import *
+from rdflib import ConjunctiveGraph, URIRef, RDF, RDFS, OWL, XSD
 from rdflib.util import guess_format, SUFFIX_FORMAT_MAP
 from rdflib.resource import Resource
 
@@ -8,19 +8,22 @@ Resource.id = Resource.identifier
 SUFFIX_FORMAT_MAP['jsonld'] = 'json-ld'
 
 
-DEFAULT_NS_PREF_ORDER = 'bf2 bf madsrdf skos dc dctype prov sdo bibo foaf void owl rdfs rdf xsd edtf'.split()
+DEFAULT_NS_PREF_ORDER = (
+        'bf2 bf madsrdf skos dc dctype prov sdo bibo foaf void'
+        'owl rdfs rdf xsd edtf').split()
 
 CLASS_TYPES = {RDFS.Class, OWL.Class, RDFS.Datatype}
 PROP_TYPES = {RDF.Property, OWL.ObjectProperty, OWL.DatatypeProperty}
 
 
-def make_context(graph, dest_vocab=None, ns_pref_order=DEFAULT_NS_PREF_ORDER, use_sub=False):
+def make_context(graph, dest_vocab,
+                 ns_pref_order=DEFAULT_NS_PREF_ORDER, use_sub=False):
     terms = set()
     for s in graph.subjects():
         if not isinstance(s, URIRef):
             continue
         r = graph.resource(s)
-        in_source_vocab = True # TODO: provide source and target vocab(s)
+        in_source_vocab = True  # TODO: provide source and target vocab(s)
         if in_source_vocab:
             terms.add(r)
     if dest_vocab.isalnum():
@@ -32,11 +35,12 @@ def make_context(graph, dest_vocab=None, ns_pref_order=DEFAULT_NS_PREF_ORDER, us
         # TODO: if SDO.rangeIncludes RDF.langString:
         #  key + 'ByLang': {"@id": key, "@container": "@language"}
         if dfn:
-            curie = dfn.get('@reverse') or dfn['@id'] if isinstance(dfn, dict) else dfn
+            curie = dfn.get('@reverse') or dfn['@id'] \
+                    if isinstance(dfn, dict) else dfn
             if ':' in curie:
                 pfx = curie.split(':', 1)[0]
                 prefixes.add(pfx)
-            key = unicode(term.qname())
+            key = _key(term)
             if key != dfn:
                 defs[key] = dfn
     ns = {}
@@ -48,6 +52,7 @@ def make_context(graph, dest_vocab=None, ns_pref_order=DEFAULT_NS_PREF_ORDER, us
     if dest_vocab:
         ns["@vocab"] = dest_vocab
     return {"@context": [ns, defs]}
+
 
 def termdef(term, ns_pref_order=None, use_sub=False):
     types = set(o.id for o in term.objects(RDF.type))
@@ -72,7 +77,7 @@ def termdef(term, ns_pref_order=None, use_sub=False):
     else:
         target_term = None
 
-    curie = unicode((target_term or term).qname())
+    curie = _key(target_term or term)
     if is_class:
         return curie
 
@@ -98,7 +103,7 @@ def termdef(term, ns_pref_order=None, use_sub=False):
         container = None
     elif islist:
         container = "@list"
-    #elif OWL.ObjectProperty in types:
+    # IMPROVE: elif OWL.ObjectProperty in types:
     #    container = "@set"
     else:
         container = None
@@ -119,6 +124,7 @@ def termdef(term, ns_pref_order=None, use_sub=False):
     else:
         return curie
 
+
 def get_preferred(term, pred, ns_pref_order=None):
     ns_pref_order = ns_pref_order or []
     current, current_index = None, len(ns_pref_order)
@@ -138,9 +144,20 @@ def get_preferred(term, pred, ns_pref_order=None):
             pass
     return current or candidate
 
+
+def _key(term):
+    dest_vocab = term.graph.store.namespace("")
+    termstr = unicode(term)
+    if termstr.startswith(dest_vocab):
+        return termstr[len(dest_vocab):]
+    else:
+        return unicode(term.qname())
+
+
 def _pfx(term):
     qname = term.qname()
     return qname.split(':', 1)[0] if ':' in qname else ""
+
 
 def add_overlay(context, overlay):
     ns, defs = context['@context']
@@ -190,5 +207,5 @@ if __name__ == '__main__':
         add_overlay(context, overlay)
 
     s = json.dumps(context, sort_keys=True, indent=2, separators=(',', ': '),
-            ensure_ascii=False).encode('utf-8')
+                   ensure_ascii=False).encode('utf-8')
     print(s)
