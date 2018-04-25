@@ -89,7 +89,8 @@ class Compiler:
 
     def to_jsonld(self, graph):
         return _to_jsonld(graph,
-                         ("../" + self.context, str(self.path(self.context))))
+                         "../" + self.context,
+                         self.load_json(self.context))
 
     def _compile_datasets(self, names):
         for name in names:
@@ -263,13 +264,30 @@ def _construct(compiler, sources, query=None):
     return g
 
 
-def _to_jsonld(source, contextref, contextobj=None):
-    contexturi, contextpath = contextref
-    context = [contextpath, contextobj] if contextobj else contextpath
-    data = from_rdf(source, context_data=context)
-    data['@context'] = [contexturi, contextobj] if contextobj else contexturi
+def _to_jsonld(source, context_uri, contextobj):
+    data = from_rdf(source, context_data=contextobj)
+    data['@context'] = context_uri
     _embed_singly_referenced_bnodes(data)
+    _expand_ids(data['@graph'], contextobj['@context'])
     return data
+
+
+def _expand_ids(obj, pfx_map):
+    """
+    Ensure @id values are in expanded form (i.e. full URIs).
+    """
+    if isinstance(obj, list):
+        for item in obj:
+            _expand_ids(item, pfx_map)
+    elif isinstance(obj, dict):
+        node_id = obj.get('@id')
+        if node_id:
+            pfx, colon, leaf = node_id.partition(':')
+            ns = pfx_map.get(pfx)
+            if ns:
+                obj['@id'] = node_id.replace(pfx + ':', ns, 1)
+        for value in obj.values():
+            _expand_ids(value, pfx_map)
 
 
 def _embed_singly_referenced_bnodes(data):
