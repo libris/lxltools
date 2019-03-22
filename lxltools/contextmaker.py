@@ -1,4 +1,7 @@
 from __future__ import unicode_literals, print_function
+if bytes is not str:
+    unicode = str
+
 import json
 from rdflib import ConjunctiveGraph, URIRef, RDF, RDFS, OWL, XSD
 from rdflib.util import guess_format, SUFFIX_FORMAT_MAP
@@ -163,14 +166,14 @@ def add_overlay(context, overlay):
     ns, defs = context['@context']
     overlay = overlay.get('@context') or overlay
     for term, dfn in overlay.items():
-        if isinstance(dfn, basestring) and dfn.endswith(('/', '#', ':', '?')):
+        if isinstance(dfn, unicode) and dfn.endswith(('/', '#', ':', '?')):
             assert term not in ns or ns[term] == dfn
             ns[term] = dfn
         elif term in defs:
             v = defs[term]
             if v == dfn:
                 continue
-            if isinstance(v, basestring):
+            if isinstance(v, unicode):
                 v = defs[term] = {'@id': v}
             if isinstance(dfn, dict):
                 v.update(kv for kv in dfn.items() if kv[0] != '@id')
