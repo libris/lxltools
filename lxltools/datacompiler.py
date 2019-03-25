@@ -247,7 +247,7 @@ def _read_csv(fpath, encoding='utf-8'):
     with opened as fp:
         reader = csv.DictReader(fp, dialect=csv_dialect)
         for item in reader:
-            yield {k: v.strip() for (k, v) in item.items() if v}
+            yield {k: decode(v.strip()) for (k, v) in item.items() if v}
 
 
 def _construct(compiler, sources, query=None):
