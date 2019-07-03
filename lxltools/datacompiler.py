@@ -1,13 +1,20 @@
 from __future__ import unicode_literals, print_function
 __metaclass__ = type
+if bytes is not str:
+    unicode = str
+
 import argparse
 from collections import OrderedDict
 try:
     from pathlib import Path
 except ImportError:
     from pathlib2 import Path
-from urlparse import urlparse, urljoin
-import urllib2
+try:
+    from urllib.parse import urlparse, urljoin, quote
+    from urllib.request import urlopen
+except ImportError:
+    from urlparse import urlparse, urljoin
+    from urllib2 import quote, urlopen
 import sys
 import json
 import csv
@@ -65,7 +72,7 @@ class Compiler:
         if use_union:
             union_fpath = self.outdir / self.union
             union_fpath.parent.mkdir(parents=True, exist_ok=True)
-            self.union_file = union_fpath.open('wb')
+            self.union_file = union_fpath.open('wt', encoding='utf-8')
         else:
             self.union_file = None
 
@@ -159,7 +166,10 @@ class Compiler:
         if node_id:
             assert not node_id.startswith('_:')
         if self.union_file:
-            print(json.dumps(node), file=self.union_file)
+            line = json.dumps(node)
+            if isinstance(line, bytes):
+                line = line.decode('utf-8')
+            print(line, file=self.union_file)
         # TODO: else: # don't write both to union_file and separate file
         pretty_repr = _serialize(node)
         if pretty_repr:
@@ -172,13 +182,13 @@ class Compiler:
             print("No data")
 
     def get_cached_path(self, url):
-        return self.cachedir / urllib2.quote(url, safe="")
+        return self.cachedir / quote(url, safe="")
 
     def cache_url(self, url):
         path = self.get_cached_path(url)
         if not path.exists():
             with path.open('wb') as fp:
-                r = urllib2.urlopen(url)
+                r = urlopen(url)
                 while True:
                     chunk = r.read(1024 * 8)
                     if not chunk: break
@@ -228,11 +238,16 @@ CSV_FORMATS = {'.csv': 'excel', '.tsv': 'excel-tab'}
 def _read_csv(fpath, encoding='utf-8'):
     csv_dialect = CSV_FORMATS.get(fpath.suffix)
     assert csv_dialect
-    with fpath.open('rb') as fp:
+    if unicode is str:
+        opened = fpath.open('rt', encoding=encoding)
+        decode = lambda v: v
+    else:
+        opened = fpath.open('rb')
+        decode = lambda v: v.decode(encoding)
+    with opened as fp:
         reader = csv.DictReader(fp, dialect=csv_dialect)
         for item in reader:
-            yield {k: v.decode(encoding).strip()
-                            for (k, v) in item.items() if v}
+            yield {k: decode(v.strip()) for (k, v) in item.items() if v}
 
 
 def _construct(compiler, sources, query=None):
