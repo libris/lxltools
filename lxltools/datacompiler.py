@@ -133,6 +133,7 @@ class Compiler:
         created_ms = datasource_created_ms + faux_offset(node_id)
 
         record = OrderedDict()
+        record['@type'] = 'Record'
         record['@id'] = self.generate_record_id(created_ms, node_id)
         record[self.record_thing_link] = {'@id': node_id}
 
