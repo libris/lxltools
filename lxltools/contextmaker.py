@@ -61,9 +61,12 @@ def termdef(term, ns_pref_order=None, use_sub=False):
     types = set(o.id for o in term.objects(RDF.type))
     is_class = types & CLASS_TYPES
     is_prop = types & PROP_TYPES
+
     if not is_class and not is_prop:
         return None
+
     predicates = [OWL.sameAs]
+
     if is_class:
         predicates.append(OWL.equivalentClass)
         if use_sub:
@@ -72,6 +75,7 @@ def termdef(term, ns_pref_order=None, use_sub=False):
         predicates.append(OWL.equivalentProperty)
         if use_sub:
             predicates.append(RDFS.subPropertyOf)
+
     for pred in predicates:
         mapped = get_preferred(term, pred, ns_pref_order)
         if mapped:
@@ -111,12 +115,8 @@ def termdef(term, ns_pref_order=None, use_sub=False):
     else:
         container = None
 
-    reverse = None if target_term else term.value(OWL.inverseOf)
-    if reverse or datatype or container:
-        if reverse:
-            dfn = {"@reverse": unicode(reverse.qname())}
-        else:
-            dfn = {"@id": curie}
+    if datatype or container:
+        dfn = {"@id": curie}
         if datatype:
             dfn["@type"] = datatype
         elif datatype is False:
