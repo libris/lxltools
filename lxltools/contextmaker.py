@@ -111,12 +111,8 @@ def termdef(term, ns_pref_order=None, use_sub=False):
     else:
         container = None
 
-    reverse = None if target_term else term.value(OWL.inverseOf)
-    if reverse or datatype or container:
-        if reverse:
-            dfn = {"@reverse": unicode(reverse.qname())}
-        else:
-            dfn = {"@id": curie}
+    if datatype or container:
+        dfn = {"@id": curie}
         if datatype:
             dfn["@type"] = datatype
         elif datatype is False:
